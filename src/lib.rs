@@ -12,3 +12,5 @@ pub mod integrator;
 pub mod particles;
 pub mod poisson;
 pub mod simulation;
+#[cfg(feature = "vis")]
+pub mod vis;

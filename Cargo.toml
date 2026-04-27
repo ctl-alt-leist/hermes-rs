@@ -14,6 +14,21 @@ serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 toml = "0.8"
 
+[features]
+vis = ["dep:kiss3d", "dep:plotters", "dep:image"]
+
+[dependencies.kiss3d]
+version = "0.35"
+optional = true
+
+[dependencies.plotters]
+version = "0.3"
+optional = true
+
+[dependencies.image]
+version = "0.25"
+optional = true
+
 [dev-dependencies]
 proptest = "1"
 approx = "0.5"
