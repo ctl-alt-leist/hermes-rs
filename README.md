@@ -16,8 +16,11 @@ Hermes is a cosmological particle-mesh simulator built on [morphis](https://gith
 ## Quick Start
 
 ```bash
-# Run a simulation (saves snapshots to data/<timestamp>/)
+# Run a cosmic web simulation (default scene)
 cargo run --release -- --particles 32 --steps 200
+
+# Run a galaxy group simulation
+cargo run --release -- --scene galaxy-group --particles 32 --steps 200
 
 # Run with live 3D viewer
 cargo run --release --features vis -- --live --particles 32 --steps 300
