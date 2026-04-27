@@ -1,8 +1,8 @@
 //! Interactive 3D particle viewer via kiss3d.
 
+use crate::colormap::particle_density_colors;
 use crate::physics::grid::Grid;
 use crate::physics::particles::Particles;
-use crate::vis::colormap::particle_density_colors;
 
 /// Open an interactive 3D window showing the particle distribution.
 ///
