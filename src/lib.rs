@@ -7,5 +7,6 @@ pub mod error;
 pub mod field;
 pub mod grid;
 pub mod initial;
+pub mod integrator;
 pub mod particles;
 pub mod poisson;
