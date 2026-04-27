@@ -20,7 +20,7 @@ fn colormap_black_at_zero() {
 
 #[test]
 fn colormap_bright_at_one() {
-    let [r, g, b] = colormap_hot(1.0);
+    let [r, g, _b] = colormap_hot(1.0);
     assert!(r > 0.9 && g > 0.9, "colormap(1) should be near white");
 }
 

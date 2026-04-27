@@ -208,7 +208,7 @@ fn simulation_with_memory_observer() {
     let config = build_configuration(None, Some(&overrides)).unwrap();
     let mut sim = Simulation::from_config(config, 42).unwrap();
 
-    let mut memory = MemoryObserver::new();
+    let _memory = MemoryObserver::new();
     let mut observers: Vec<Box<dyn Observer>> = vec![Box::new(NullObserver)];
 
     // MemoryObserver can't go in the vec directly since we need it back.

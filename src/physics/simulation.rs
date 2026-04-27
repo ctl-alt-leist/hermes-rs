@@ -83,20 +83,14 @@ impl Simulation {
             &self.config.time.stepping,
         );
 
-        // Notify observers with initial snapshot.
-        let initial_snapshot = Snapshot::capture(
-            &self.particles,
-            &self.grid,
-            &self.cosmology,
-            &mut self.solver,
-            0,
-            self.scale_factor,
-        );
+        // Notify observers with initial snapshot (lightweight — no Poisson).
+        let initial_snapshot = Snapshot::capture_lightweight(&self.particles, 0, self.scale_factor);
         for observer in observers.iter_mut() {
             observer.on_snapshot(&initial_snapshot);
         }
 
         let mut forces_prev = None;
+        let has_observers = !observers.is_empty();
 
         for n in 0..self.config.time.n_steps {
             let scale_factor_prev = schedule[n];
@@ -118,12 +112,22 @@ impl Simulation {
             self.scale_factor = scale_factor_next;
             forces_prev = Some(forces);
 
-            // Record diagnostics and notify observers at snapshot intervals.
-            if self
+            // Lightweight snapshot for observers every step.
+            if has_observers {
+                let snapshot =
+                    Snapshot::capture_lightweight(&self.particles, self.step, self.scale_factor);
+                for observer in observers.iter_mut() {
+                    observer.on_snapshot(&snapshot);
+                }
+            }
+
+            // Full diagnostics (expensive Poisson solve) only at the wider interval.
+            let is_diagnostic_step = self
                 .step
                 .is_multiple_of(self.config.output.snapshot_interval)
-                || self.step == self.config.time.n_steps
-            {
+                || self.step == self.config.time.n_steps;
+
+            if is_diagnostic_step {
                 let diagnostics = Diagnostics::compute(
                     &self.particles,
                     &self.grid,
@@ -132,18 +136,6 @@ impl Simulation {
                     self.scale_factor,
                 );
                 self.diagnostics_history.push(diagnostics);
-
-                let snapshot = Snapshot::capture(
-                    &self.particles,
-                    &self.grid,
-                    &self.cosmology,
-                    &mut self.solver,
-                    self.step,
-                    self.scale_factor,
-                );
-                for observer in observers.iter_mut() {
-                    observer.on_snapshot(&snapshot);
-                }
             }
         }
 

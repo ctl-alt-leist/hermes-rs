@@ -76,7 +76,11 @@ pub struct SnapshotOnDisk {
 }
 
 impl Snapshot {
-    /// Capture a snapshot from the current simulation state.
+    /// Capture a full snapshot including diagnostics (Poisson solve).
+    ///
+    /// This is expensive (~250ms for 32³) because it computes the
+    /// gravitational potential for the energy diagnostic. Use
+    /// `capture_lightweight` for the viewer path.
     pub fn capture(
         particles: &Particles,
         grid: &Grid,
@@ -84,6 +88,52 @@ impl Snapshot {
         solver: &mut crate::physics::poisson::PoissonSolver,
         step: usize,
         scale_factor: f64,
+    ) -> Self {
+        let diag = Diagnostics::compute(particles, grid, cosmology, solver, scale_factor);
+
+        Self::capture_with_diagnostics(particles, step, scale_factor, &diag)
+    }
+
+    /// Capture a lightweight snapshot — just positions and momenta.
+    ///
+    /// Skips the Poisson solve entirely. Diagnostics are populated with
+    /// only the quantities that are cheap to compute (mass, momentum,
+    /// kinetic energy). Suitable for the live viewer path where every
+    /// frame matters.
+    pub fn capture_lightweight(particles: &Particles, step: usize, scale_factor: f64) -> Self {
+        let positions = (0..particles.count())
+            .map(|p| particles.position_of(p))
+            .collect();
+
+        let momenta = (0..particles.count())
+            .map(|p| particles.momentum_of(p))
+            .collect();
+
+        let energy_kinetic = particles.kinetic_energy(scale_factor);
+
+        Self {
+            step,
+            scale_factor,
+            positions,
+            momenta,
+            mass_particle: particles.mass_particle,
+            diagnostics: DiagnosticsSummary {
+                scale_factor,
+                mass_total: particles.total_mass(),
+                momentum_magnitude: particles.total_momentum().norm(),
+                energy_kinetic,
+                energy_potential: 0.0,
+                angular_momentum_magnitude: 0.0,
+            },
+        }
+    }
+
+    /// Build a snapshot from pre-computed diagnostics.
+    fn capture_with_diagnostics(
+        particles: &Particles,
+        step: usize,
+        scale_factor: f64,
+        diagnostics: &Diagnostics,
     ) -> Self {
         let positions = (0..particles.count())
             .map(|p| particles.position_of(p))
@@ -93,15 +143,13 @@ impl Snapshot {
             .map(|p| particles.momentum_of(p))
             .collect();
 
-        let diag = Diagnostics::compute(particles, grid, cosmology, solver, scale_factor);
-
         Self {
             step,
             scale_factor,
             positions,
             momenta,
             mass_particle: particles.mass_particle,
-            diagnostics: DiagnosticsSummary::from_diagnostics(&diag),
+            diagnostics: DiagnosticsSummary::from_diagnostics(diagnostics),
         }
     }
 
