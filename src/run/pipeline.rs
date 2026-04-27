@@ -81,11 +81,18 @@ impl SnapshotSender {
 /// A downstream consumer connected to the router via a channel.
 struct Consumer {
     tx: SyncSender<PipelineMessage>,
+    /// If true, frames are dropped when the channel is full (viewer).
+    /// If false, the router blocks until the consumer catches up (disk writer).
+    droppable: bool,
 }
 
 impl Consumer {
-    fn try_send(&self, msg: PipelineMessage) {
-        let _ = self.tx.try_send(msg);
+    fn send(&self, msg: PipelineMessage) {
+        if self.droppable {
+            let _ = self.tx.try_send(msg);
+        } else {
+            let _ = self.tx.send(msg);
+        }
     }
 
     fn send_blocking(&self, msg: PipelineMessage) {
@@ -97,16 +104,30 @@ impl Consumer {
 // Router
 // ============================================================================
 
+/// Configuration for a consumer channel.
+pub struct ConsumerConfig {
+    pub tx: SyncSender<PipelineMessage>,
+    /// If true, frames are dropped when channel is full (viewer).
+    /// If false, the router blocks until the consumer catches up (disk).
+    pub droppable: bool,
+}
+
 /// Spawn the router thread: receives from simulation, fans out to consumers.
 ///
 /// Snapshots are Arc::clone'd to each consumer (reference count only).
-/// Uses try_send for snapshots (drop if consumer is slow) and blocking
-/// send for Done (ensure every consumer shuts down).
+/// Non-droppable consumers (disk writer) receive every frame; droppable
+/// consumers (viewer) have frames silently dropped when their channel is full.
 pub fn spawn_router(
     rx: Receiver<PipelineMessage>,
-    consumers: Vec<SyncSender<PipelineMessage>>,
+    consumers: Vec<ConsumerConfig>,
 ) -> thread::JoinHandle<()> {
-    let consumers: Vec<Consumer> = consumers.into_iter().map(|tx| Consumer { tx }).collect();
+    let consumers: Vec<Consumer> = consumers
+        .into_iter()
+        .map(|c| Consumer {
+            tx: c.tx,
+            droppable: c.droppable,
+        })
+        .collect();
 
     thread::Builder::new()
         .name("pipeline-router".to_string())
@@ -115,7 +136,7 @@ pub fn spawn_router(
                 match msg {
                     PipelineMessage::Snapshot(snapshot) => {
                         for consumer in &consumers {
-                            consumer.try_send(PipelineMessage::Snapshot(Arc::clone(&snapshot)));
+                            consumer.send(PipelineMessage::Snapshot(Arc::clone(&snapshot)));
                         }
                     }
                     PipelineMessage::Done => {
@@ -284,7 +305,8 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
 
     use crate::io::snapshot::load_snapshot;
 
-    let total = count_snapshots(dir);
+    let snapshot_paths = find_snapshot_paths(dir);
+    let total = snapshot_paths.len();
     if total == 0 {
         return Err(crate::error::HermesError::Config(format!(
             "no snapshots found in {dir}/"
@@ -294,7 +316,7 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
     println!("Loading {total} snapshots from {dir}/...");
 
     // Estimate box length from first snapshot.
-    let first = load_snapshot(std::path::Path::new(&format!("{dir}/snapshot-00000.bin")))?;
+    let first = load_snapshot(&snapshot_paths[0])?;
     let box_length = first
         .positions
         .iter()
@@ -304,17 +326,12 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
 
     // Loader thread: load + precompute frames, send via channel.
     let (frame_tx, frame_rx) = playback_mpsc::sync_channel::<ViewerMessage>(32);
-    let dir_owned = dir.to_string();
 
     let loader_handle = thread::Builder::new()
         .name("playback-loader".to_string())
         .spawn(move || {
-            // Precompute all frames, sending each as ready.
-            // Snapshots are discarded after precompute — only DisplayFrames
-            // stay in the channel buffer.
-            for step in 0..total {
-                let path = format!("{dir_owned}/snapshot-{step:05}.bin");
-                match crate::io::snapshot::load_snapshot(std::path::Path::new(&path)) {
+            for path in &snapshot_paths {
+                match crate::io::snapshot::load_snapshot(path) {
                     Ok(snapshot) => {
                         let frame = precompute_frame_rayon(&snapshot, box_length);
                         // Blocking send — playback should not drop frames.
@@ -325,7 +342,7 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
                             break; // Viewer closed.
                         }
                     }
-                    Err(e) => eprintln!("warning: failed to load {path}: {e}"),
+                    Err(e) => eprintln!("warning: failed to load {}: {e}", path.display()),
                 }
             }
             let _ = frame_tx.send(ViewerMessage::Done);
@@ -400,16 +417,31 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
 // Utilities
 // ============================================================================
 
+/// Find all snapshot files in a directory, sorted by name.
+///
+/// Scans for all `snapshot-*.bin` files rather than assuming sequential
+/// numbering (the pipeline may drop frames under load).
+pub fn find_snapshot_paths(dir: &str) -> Vec<std::path::PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+
+    let mut paths: Vec<std::path::PathBuf> = entries
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("snapshot-") && n.ends_with(".bin"))
+        })
+        .collect();
+
+    paths.sort();
+
+    paths
+}
+
 /// Count snapshot files in a directory.
 pub fn count_snapshots(dir: &str) -> usize {
-    let mut count = 0;
-    loop {
-        let path = format!("{dir}/snapshot-{count:05}.bin");
-        if !std::path::Path::new(&path).exists() {
-            break;
-        }
-        count += 1;
-    }
-
-    count
+    find_snapshot_paths(dir).len()
 }

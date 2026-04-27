@@ -61,7 +61,7 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     let sender = SnapshotSender::new(sim_tx);
 
     // Build consumer list.
-    let mut consumer_senders = Vec::new();
+    let mut consumer_senders: Vec<pipeline::ConsumerConfig> = Vec::new();
     let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
 
     if let Some(ref dir) = save_dir {
@@ -69,7 +69,10 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
             println!("Saving snapshots to {dir}/");
         }
         let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(16);
-        consumer_senders.push(disk_tx);
+        consumer_senders.push(pipeline::ConsumerConfig {
+            tx: disk_tx,
+            droppable: false,
+        });
         let dir_owned = dir.clone();
         handles.push(spawn_disk_writer(disk_rx, dir_owned));
     }
@@ -166,19 +169,25 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(8);
     let sender = SnapshotSender::new(sim_tx);
 
-    let mut consumer_senders = Vec::new();
+    let mut consumer_senders: Vec<pipeline::ConsumerConfig> = Vec::new();
     let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
 
     // Disk writer (optional).
     if let Some(ref dir) = save_dir {
         let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(16);
-        consumer_senders.push(disk_tx);
+        consumer_senders.push(pipeline::ConsumerConfig {
+            tx: disk_tx,
+            droppable: false,
+        });
         handles.push(spawn_disk_writer(disk_rx, dir.clone()));
     }
 
     // Precompute → Viewer channel.
     let (precompute_tx, precompute_rx) = mpsc::sync_channel::<PipelineMessage>(4);
-    consumer_senders.push(precompute_tx);
+    consumer_senders.push(pipeline::ConsumerConfig {
+        tx: precompute_tx,
+        droppable: true,
+    });
 
     let (frame_tx, frame_rx) = mpsc::sync_channel::<pipeline::ViewerMessage>(4);
     handles.push(pipeline::spawn_precompute(
@@ -247,7 +256,8 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
     use crate::colormap::colormap_hot;
     use crate::io::snapshot::load_snapshot;
 
-    let total = pipeline::count_snapshots(dir);
+    let snapshot_paths = pipeline::find_snapshot_paths(dir);
+    let total = snapshot_paths.len();
     if total == 0 {
         return Err(HermesError::Config(format!("no snapshots found in {dir}/")));
     }
@@ -260,7 +270,7 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
     let height = 512_u32;
     let point_radius = 1_i32;
 
-    let first = load_snapshot(std::path::Path::new(&format!("{dir}/snapshot-00000.bin")))?;
+    let first = load_snapshot(&snapshot_paths[0])?;
     let box_length = first
         .positions
         .iter()
@@ -295,9 +305,8 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
         None
     };
 
-    for step in 0..total {
-        let path = format!("{dir}/snapshot-{step:05}.bin");
-        let snapshot = load_snapshot(std::path::Path::new(&path))?;
+    for path in &snapshot_paths {
+        let snapshot = load_snapshot(path)?;
 
         let speeds: Vec<f64> = snapshot.momenta.iter().map(|mom| mom.norm()).collect();
         let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
