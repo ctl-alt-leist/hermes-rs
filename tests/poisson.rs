@@ -21,13 +21,13 @@ fn uniform_density_gives_zero_force() {
     let force = solver.solve(&overdensity, DENSITY_MEAN, SCALE_FACTOR);
 
     for d in 0..3 {
-        let max_val = force.data[d]
+        let max_force = force.data[d]
             .iter()
             .map(|v| v.abs())
             .fold(0.0_f64, f64::max);
         assert!(
-            max_val < 1e-10,
-            "uniform density should give zero force, component {d} has max {max_val}"
+            max_force < 1e-10,
+            "uniform density should give zero force, component {d} has max {max_force}"
         );
     }
 }
@@ -54,10 +54,10 @@ fn single_mode_potential() {
     let mut overdensity = ScalarField::zeros(&grid);
     for m0 in 0..n {
         let x = (m0 as f64 + 0.5) * h;
-        let val = amplitude * (k_fund * x).sin();
+        let overdensity_x = amplitude * (k_fund * x).sin();
         for m1 in 0..n {
             for m2 in 0..n {
-                *overdensity.get_mut(m0, m1, m2) = val;
+                *overdensity.get_mut(m0, m1, m2) = overdensity_x;
             }
         }
     }
@@ -91,13 +91,13 @@ fn single_mode_potential() {
 
     // Fy and Fz should be negligible.
     for d in 1..3 {
-        let max_val = force.data[d]
+        let max_force = force.data[d]
             .iter()
             .map(|v| v.abs())
             .fold(0.0_f64, f64::max);
         assert!(
-            max_val < expected_amplitude * 1e-10,
-            "F{} should be ~0 for x-only mode, max = {max_val}",
+            max_force < expected_amplitude * 1e-10,
+            "F{} should be ~0 for x-only mode, max = {max_force}",
             ["x", "y", "z"][d]
         );
     }
@@ -172,10 +172,10 @@ fn force_antisymmetric() {
     let mut overdensity_pos = ScalarField::zeros(&grid);
     for m0 in 0..n {
         let x = (m0 as f64 + 0.5) * h;
-        let val = 0.1 * (k_fund * x).sin();
+        let overdensity_x = 0.1 * (k_fund * x).sin();
         for m1 in 0..n {
             for m2 in 0..n {
-                *overdensity_pos.get_mut(m0, m1, m2) = val;
+                *overdensity_pos.get_mut(m0, m1, m2) = overdensity_x;
             }
         }
     }
@@ -187,12 +187,12 @@ fn force_antisymmetric() {
 
     // F(-δ) should equal -F(δ).
     for d in 0..3 {
-        for ((m0, m1, m2), &val_pos) in force_pos.data[d].indexed_iter() {
-            let val_neg = force_neg.data[d][[m0, m1, m2]];
-            let err = (val_pos + val_neg).abs();
+        for ((m0, m1, m2), &force_cell_pos) in force_pos.data[d].indexed_iter() {
+            let force_cell_neg = force_neg.data[d][[m0, m1, m2]];
+            let err = (force_cell_pos + force_cell_neg).abs();
             assert!(
                 err < 1e-10,
-                "F{d}[{m0},{m1},{m2}]: F(+δ) = {val_pos}, F(-δ) = {val_neg}, sum = {err}"
+                "F{d}[{m0},{m1},{m2}]: F(+δ) = {force_cell_pos}, F(-δ) = {force_cell_neg}, sum = {err}"
             );
         }
     }
@@ -215,10 +215,10 @@ fn nonzero_mean_overdensity_still_works() {
     let mut overdensity = ScalarField::zeros(&grid);
     for m0 in 0..grid.n_cells {
         let x = (m0 as f64 + 0.5) * h;
-        let val = 0.5 + 0.1 * (k_fund * x).sin();
+        let overdensity_x = 0.5 + 0.1 * (k_fund * x).sin();
         for m1 in 0..grid.n_cells {
             for m2 in 0..grid.n_cells {
-                *overdensity.get_mut(m0, m1, m2) = val;
+                *overdensity.get_mut(m0, m1, m2) = overdensity_x;
             }
         }
     }

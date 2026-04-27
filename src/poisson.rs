@@ -102,27 +102,29 @@ impl PoissonSolver {
         //   1) R2C along axis 2 (innermost)
         //   2) C2C along axis 1
         //   3) C2C along axis 0
-        let mut complex_buf = Array3::<Complex64>::zeros((n, n, n_complex));
+        let mut overdensity_hat = Array3::<Complex64>::zeros((n, n, n_complex));
         ndfft_r2c(
             &overdensity.data,
-            &mut complex_buf,
+            &mut overdensity_hat,
             &self.handler_r2c,
             2,
         );
 
-        let mut temp = complex_buf.clone();
-        ndfft(&complex_buf, &mut temp, &self.handler_c2c_1, 1);
-        complex_buf.assign(&temp);
-        ndfft(&complex_buf, &mut temp, &self.handler_c2c_0, 0);
-        complex_buf.assign(&temp);
+        let mut scratch = overdensity_hat.clone();
+        ndfft(&overdensity_hat, &mut scratch, &self.handler_c2c_1, 1);
+        overdensity_hat.assign(&scratch);
+        ndfft(&overdensity_hat, &mut scratch, &self.handler_c2c_0, 0);
+        overdensity_hat.assign(&scratch);
 
         // Multiply by Green's function with physical prefactor.
+        // ϕ̂(k) = 4πG ρ̄ a² × G(k) × δ̂(k)
         let prefactor = 4.0 * PI * GRAV * density_mean * scale_factor * scale_factor;
+        let mut potential_hat = overdensity_hat;
 
         for m0 in 0..n {
             for m1 in 0..n {
                 for m2 in 0..n_complex {
-                    complex_buf[[m0, m1, m2]] *= prefactor * self.green[[m0, m1, m2]];
+                    potential_hat[[m0, m1, m2]] *= prefactor * self.green[[m0, m1, m2]];
                 }
             }
         }
@@ -131,7 +133,8 @@ impl PoissonSolver {
         let mut force = VectorField::zeros(&self.grid);
 
         for d in 0..3 {
-            let mut force_hat = complex_buf.clone();
+            // F̂_d(k) = -i k_d × ϕ̂(k)
+            let mut force_hat = potential_hat.clone();
 
             for m0 in 0..n {
                 let k0 = self.grid.wavevector_component(m0);
@@ -153,16 +156,16 @@ impl PoissonSolver {
             //   1) C2C inverse along axis 0
             //   2) C2C inverse along axis 1
             //   3) C2R inverse along axis 2
-            let mut temp2 = force_hat.clone();
-            ndifft(&force_hat, &mut temp2, &self.handler_c2c_0, 0);
-            force_hat.assign(&temp2);
-            ndifft(&force_hat, &mut temp2, &self.handler_c2c_1, 1);
-            force_hat.assign(&temp2);
+            let mut scratch = force_hat.clone();
+            ndifft(&force_hat, &mut scratch, &self.handler_c2c_0, 0);
+            force_hat.assign(&scratch);
+            ndifft(&force_hat, &mut scratch, &self.handler_c2c_1, 1);
+            force_hat.assign(&scratch);
 
-            let mut real_out = Array3::<f64>::zeros((n, n, n));
-            ndifft_r2c(&force_hat, &mut real_out, &self.handler_r2c, 2);
+            let mut force_component = Array3::<f64>::zeros((n, n, n));
+            ndifft_r2c(&force_hat, &mut force_component, &self.handler_r2c, 2);
 
-            force.data[d] = real_out;
+            force.data[d] = force_component;
         }
 
         force
