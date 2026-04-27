@@ -210,6 +210,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 [[package]]
 name = "morphis"
 version = "0.1.0"
+source = "git+https://github.com/ctl-alt-leist/morphis-rs.git#2fbde061ef481af68e0f4c1afd4da41525f492fc"
 dependencies = [
  "ndarray",
  "thiserror",
