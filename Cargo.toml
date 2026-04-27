@@ -29,6 +29,10 @@ optional = true
 version = "0.25"
 optional = true
 
+[[example]]
+name = "cosmic_web"
+required-features = ["vis"]
+
 [dev-dependencies]
 proptest = "1"
 approx = "0.5"
