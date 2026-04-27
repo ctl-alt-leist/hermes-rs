@@ -74,6 +74,18 @@ impl Grid {
         ]
     }
 
+    /// Cell center position as a morphis grade-1 vector.
+    pub fn cell_center_vector(
+        &self,
+        m0: usize,
+        m1: usize,
+        m2: usize,
+    ) -> morphis::vector::Vector<3> {
+        let c = self.cell_center(m0, m1, m2);
+
+        crate::algebra::vector_from_components(c[0], c[1], c[2])
+    }
+
     /// Wavevector component for Fourier index m along one axis.
     ///
     /// Returns k = 2π m / box_length, with the convention that indices

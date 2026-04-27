@@ -1,3 +1,4 @@
+use hermes_rs::algebra::vector_from_array;
 use hermes_rs::cic::{assign_density, interpolate_force};
 use hermes_rs::field::VectorField;
 use hermes_rs::grid::Grid;
@@ -61,8 +62,8 @@ fn particle_at_cell_center() {
     let mut particles = Particles::zeros(1, 1e10);
 
     // Place particle at the center of cell (3, 3, 3).
-    let center = grid.cell_center(3, 3, 3);
-    particles.set_position(0, center);
+    let center = grid.cell_center_vector(3, 3, 3);
+    particles.set_position(0, &center);
 
     let density = assign_density(&particles, &grid);
 
@@ -93,7 +94,7 @@ fn particle_at_cell_corner() {
 
     // Place particle at the corner shared by cells (2,2,2), (3,2,2), etc.
     // This is position (3h, 3h, 3h) — the vertex between cells 2 and 3.
-    particles.set_position(0, [3.0 * h, 3.0 * h, 3.0 * h]);
+    particles.set_position_components(0, [3.0 * h, 3.0 * h, 3.0 * h]);
 
     let density = assign_density(&particles, &grid);
 
@@ -125,7 +126,7 @@ fn particle_at_cell_face_center() {
 
     // Place at the face center between cells (3,3,3) and (4,3,3).
     // Position: x = 4h (face), y = 3.5h (center), z = 3.5h (center).
-    particles.set_position(0, [4.0 * h, 3.5 * h, 3.5 * h]);
+    particles.set_position_components(0, [4.0 * h, 3.5 * h, 3.5 * h]);
 
     let density = assign_density(&particles, &grid);
 
@@ -156,7 +157,7 @@ fn particle_near_boundary_wraps() {
     let mut particles = Particles::zeros(1, 1e10);
 
     // Place near the upper boundary: just past cell 7, wraps to cell 0.
-    particles.set_position(0, [7.5 * h + 0.5 * h, 3.5 * h, 3.5 * h]);
+    particles.set_position_components(0, [7.5 * h + 0.5 * h, 3.5 * h, 3.5 * h]);
 
     let density = assign_density(&particles, &grid);
 
@@ -190,23 +191,24 @@ fn uniform_force_returns_same_for_all_particles() {
     force.data[1].fill(2.0);
     force.data[2].fill(3.0);
 
-    let result = interpolate_force(&force, &particles, &grid);
+    let forces = interpolate_force(&force, &particles, &grid);
 
     for p in 0..particles.count() {
+        let force_p = forces.force_on(p);
         assert!(
-            (result[[0, p]] - 1.0).abs() < 1e-12,
+            (force_p.component(&[0]) - 1.0).abs() < 1e-12,
             "particle {p}: Fx = {}, expected 1.0",
-            result[[0, p]]
+            force_p.component(&[0])
         );
         assert!(
-            (result[[1, p]] - 2.0).abs() < 1e-12,
+            (force_p.component(&[1]) - 2.0).abs() < 1e-12,
             "particle {p}: Fy = {}, expected 2.0",
-            result[[1, p]]
+            force_p.component(&[1])
         );
         assert!(
-            (result[[2, p]] - 3.0).abs() < 1e-12,
+            (force_p.component(&[2]) - 3.0).abs() < 1e-12,
             "particle {p}: Fz = {}, expected 3.0",
-            result[[2, p]]
+            force_p.component(&[2])
         );
     }
 }
@@ -216,29 +218,30 @@ fn interpolation_at_cell_center_reads_cell_value() {
     let grid = Grid::new(8, 80.0);
     let mut particles = Particles::zeros(1, 1e10);
     let center = grid.cell_center(3, 3, 3);
-    particles.set_position(0, center);
+    particles.set_position(0, &vector_from_array(center));
 
     let mut force = VectorField::zeros(&grid);
     force.data[0][[3, 3, 3]] = 7.0;
     force.data[1][[3, 3, 3]] = 8.0;
     force.data[2][[3, 3, 3]] = 9.0;
 
-    let result = interpolate_force(&force, &particles, &grid);
+    let forces = interpolate_force(&force, &particles, &grid);
+    let force_0 = forces.force_on(0);
 
     assert!(
-        (result[[0, 0]] - 7.0).abs() < 1e-12,
+        (force_0.component(&[0]) - 7.0).abs() < 1e-12,
         "Fx at cell center: expected 7.0, got {}",
-        result[[0, 0]]
+        force_0.component(&[0])
     );
     assert!(
-        (result[[1, 0]] - 8.0).abs() < 1e-12,
+        (force_0.component(&[1]) - 8.0).abs() < 1e-12,
         "Fy at cell center: expected 8.0, got {}",
-        result[[1, 0]]
+        force_0.component(&[1])
     );
     assert!(
-        (result[[2, 0]] - 9.0).abs() < 1e-12,
+        (force_0.component(&[2]) - 9.0).abs() < 1e-12,
         "Fz at cell center: expected 9.0, got {}",
-        result[[2, 0]]
+        force_0.component(&[2])
     );
 }
 
