@@ -34,7 +34,7 @@ fn simulation_runs_without_panic() {
     let config = small_config();
     let mut sim = Simulation::from_config(config, 42).unwrap();
 
-    let n_steps = sim.run().unwrap();
+    let n_steps = sim.run(&mut []).unwrap();
     assert_eq!(n_steps, 5);
 }
 
@@ -43,7 +43,7 @@ fn simulation_records_diagnostics() {
     let config = small_config();
     let mut sim = Simulation::from_config(config, 42).unwrap();
 
-    sim.run().unwrap();
+    sim.run(&mut []).unwrap();
 
     // With snapshot_interval = 1 and 5 steps, we get initial + 5 snapshots = 6.
     assert_eq!(
@@ -58,7 +58,7 @@ fn simulation_reaches_final_scale_factor() {
     let config = small_config();
     let mut sim = Simulation::from_config(config, 42).unwrap();
 
-    sim.run().unwrap();
+    sim.run(&mut []).unwrap();
 
     assert!(
         (sim.scale_factor - 0.05).abs() < 1e-6,
@@ -76,7 +76,7 @@ fn mass_conserved_throughout_run() {
     let config = small_config();
     let mut sim = Simulation::from_config(config, 42).unwrap();
 
-    sim.run().unwrap();
+    sim.run(&mut []).unwrap();
 
     let mass_initial = sim.diagnostics_history[0].mass_total;
     for (n, diag) in sim.diagnostics_history.iter().enumerate() {
@@ -94,7 +94,7 @@ fn momentum_stays_small() {
     let config = small_config();
     let mut sim = Simulation::from_config(config, 42).unwrap();
 
-    sim.run().unwrap();
+    sim.run(&mut []).unwrap();
 
     // Total comoving momentum should remain small (not exactly zero due to
     // finite Fourier-space sampling, but bounded).
@@ -118,7 +118,7 @@ fn diagnostics_have_correct_scale_factors() {
     let config = small_config();
     let mut sim = Simulation::from_config(config, 42).unwrap();
 
-    sim.run().unwrap();
+    sim.run(&mut []).unwrap();
 
     // First diagnostics at initial scale factor.
     assert!(
@@ -147,7 +147,7 @@ fn latest_diagnostics_is_final() {
     let config = small_config();
     let mut sim = Simulation::from_config(config, 42).unwrap();
 
-    sim.run().unwrap();
+    sim.run(&mut []).unwrap();
 
     let latest = sim.latest_diagnostics().unwrap();
     assert!(
@@ -161,7 +161,7 @@ fn angular_momentum_grade_2_throughout() {
     let config = small_config();
     let mut sim = Simulation::from_config(config, 42).unwrap();
 
-    sim.run().unwrap();
+    sim.run(&mut []).unwrap();
 
     for diag in &sim.diagnostics_history {
         assert_eq!(
