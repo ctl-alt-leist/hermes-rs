@@ -11,6 +11,7 @@ image = "0.25"
 indicatif = "0.17"
 morphis = { git = "https://github.com/ctl-alt-leist/morphis-rs.git" }
 ndarray = "0.16"
+rayon = "1"
 ndrustfft = "0.5"
 num-complex = "0.4"
 rand = "0.9"

@@ -1,52 +1,36 @@
-//! Simulation runner — orchestrates init, stepping, observers, and post-run.
+//! Simulation runner — thin orchestrator over the pipeline.
+//!
+//! Routes CLI flags to the appropriate pipeline configuration:
+//! headless, live, playback, or record. The simulation always runs
+//! on a spawned thread; the main thread owns the event loop.
 
+use std::sync::mpsc;
+use std::thread;
 use std::time::Instant;
 
-use crate::config::{Configuration, build_configuration};
+use crate::config::Configuration;
 use crate::error::HermesError;
-use crate::io::observer::{FileObserver, Observer};
 use crate::run::cli::Cli;
+use crate::run::pipeline::{
+    self, PipelineMessage, SnapshotSender, spawn_disk_writer, spawn_router,
+};
 use crate::scenes::scene_by_name;
 
-/// Run a simulation based on CLI arguments.
+/// Run based on CLI arguments.
 pub fn run(cli: &Cli) -> Result<(), HermesError> {
-    // Handle playback mode separately.
     if let Some(ref dir) = cli.playback {
         return run_playback(dir, cli);
     }
 
-    // Build configuration.
     let config = load_config(cli)?;
 
     if !cli.quiet {
         print_header(&config, cli);
     }
 
-    // Look up the scene.
-    let scene = scene_by_name(&cli.scene)?;
-
-    // Initialize.
-    let start = Instant::now();
-    let mut sim = scene.initialize(&config, cli.seed)?;
-
-    if !cli.quiet {
-        println!("Initialized in {:.2}s", start.elapsed().as_secs_f64());
-        println!();
-    }
-
-    // Determine save directory.
-    let save_dir = cli.save_directory();
-
-    // Live mode: viewer on main thread, simulation on background thread.
     #[cfg(feature = "vis")]
     if cli.live {
-        if !cli.quiet {
-            println!("Starting live viewer + simulation...");
-            println!("(close the viewer window to exit)");
-            println!();
-        }
-
-        return crate::vis::run_with_live_viewer(config, cli.seed, save_dir.as_deref(), 4);
+        return run_live(config, cli);
     }
 
     #[cfg(not(feature = "vis"))]
@@ -56,139 +40,188 @@ pub fn run(cli: &Cli) -> Result<(), HermesError> {
         ));
     }
 
-    // Headless mode: run with observers.
-    let mut observers: Vec<Box<dyn Observer>> = Vec::new();
+    run_headless(config, cli)
+}
+
+// ============================================================================
+// Headless: simulation on spawned thread, main blocks on join
+// ============================================================================
+
+fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
+    let save_dir = cli.save_directory();
+    let seed = cli.seed;
+    let quiet = cli.quiet;
+    let scene_name = cli.scene.clone();
+    let total_steps = config.time.n_steps;
+
+    // Simulation → Router channel.
+    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(8);
+    let sender = SnapshotSender::new(sim_tx);
+
+    // Build consumer list.
+    let mut consumer_senders = Vec::new();
+    let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
 
     if let Some(ref dir) = save_dir {
-        if !cli.quiet {
+        if !quiet {
             println!("Saving snapshots to {dir}/");
         }
-        observers.push(Box::new(FileObserver::new(dir)));
+        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(16);
+        consumer_senders.push(disk_tx);
+        let dir_owned = dir.clone();
+        handles.push(spawn_disk_writer(disk_rx, dir_owned));
     }
 
-    let total_steps = config.time.n_steps;
+    let router_handle = spawn_router(router_rx, consumer_senders);
+
+    // Spawn simulation.
     let run_start = Instant::now();
 
-    if !cli.quiet {
-        use indicatif::{ProgressBar, ProgressStyle};
+    let sim_handle = thread::Builder::new()
+        .name("simulation".to_string())
+        .spawn(move || -> Result<crate::physics::simulation::Simulation, HermesError> {
+            let scene = scene_by_name(&scene_name)?;
+            let mut sim = scene.initialize(&config, seed)?;
 
-        let progress_bar = ProgressBar::new(total_steps as u64);
-        progress_bar.set_style(
-            ProgressStyle::with_template(
-                "{spinner:.cyan} [{elapsed_precise}] [{bar:40.cyan/dark.grey}] step {pos}/{len} z={msg} ({eta} remaining)"
-            )
-            .unwrap()
-            .progress_chars("=> "),
-        );
+            if !quiet {
+                use indicatif::{ProgressBar, ProgressStyle};
 
-        let n_steps = sim.run_with_progress(&mut observers, |step, scale_factor| {
-            let redshift = 1.0 / scale_factor - 1.0;
-            progress_bar.set_position(step as u64);
-            progress_bar.set_message(format!("{redshift:.1}"));
-        })?;
+                let progress_bar = ProgressBar::new(total_steps as u64);
+                progress_bar.set_style(
+                    ProgressStyle::with_template(
+                        "{spinner:.cyan} [{elapsed_precise}] [{bar:40.cyan/dark.grey}] step {pos}/{len} z={msg} ({eta} remaining)",
+                    )
+                    .unwrap()
+                    .progress_chars("=> "),
+                );
 
-        let run_time = run_start.elapsed();
-        progress_bar.finish_and_clear();
-        println!(
-            "Completed {n_steps} steps in {:.2}s ({:.1} ms/step)",
-            run_time.as_secs_f64(),
-            run_time.as_secs_f64() * 1000.0 / n_steps as f64,
-        );
-    } else {
-        let n_steps = sim.run(&mut observers)?;
-        let run_time = run_start.elapsed();
-        let _ = (n_steps, run_time);
+                sim.run_into_pipeline(&sender, |step, scale_factor| {
+                    let redshift = 1.0 / scale_factor - 1.0;
+                    progress_bar.set_position(step as u64);
+                    progress_bar.set_message(format!("{redshift:.1}"));
+                })?;
+
+                progress_bar.finish_and_clear();
+            } else {
+                sim.run_into_pipeline(&sender, |_, _| {})?;
+            }
+
+            Ok(sim)
+        })
+        .expect("failed to spawn simulation thread");
+
+    // Main thread: block waiting for simulation.
+    let sim = sim_handle.join().expect("simulation thread panicked")?;
+
+    let run_time = run_start.elapsed();
+
+    let _ = router_handle.join();
+    for h in handles {
+        let _ = h.join();
     }
 
-    if !cli.quiet
-        && let Some(diag) = sim.latest_diagnostics()
-    {
-        println!();
-        println!("Final state (z = {:.1}):", 1.0 / sim.scale_factor - 1.0);
-        println!("  Mass:     {:.4e} M_☉", diag.mass_total);
-        println!("  |P|:      {:.4e}", diag.momentum_magnitude());
-        println!("  E_kin:    {:.4e}", diag.energy_kinetic);
-        println!("  E_pot:    {:.4e}", diag.energy_potential);
-        println!("  |L|:      {:.4e}", diag.angular_momentum_magnitude());
+    if !quiet {
+        println!(
+            "Completed {} steps in {:.2}s ({:.1} ms/step)",
+            sim.step,
+            run_time.as_secs_f64(),
+            run_time.as_secs_f64() * 1000.0 / sim.step as f64,
+        );
+
+        if let Some(diag) = sim.latest_diagnostics() {
+            println!();
+            println!("Final state (z = {:.1}):", 1.0 / sim.scale_factor - 1.0);
+            println!("  Mass:     {:.4e} M_☉", diag.mass_total);
+            println!("  |P|:      {:.4e}", diag.momentum_magnitude());
+            println!("  E_kin:    {:.4e}", diag.energy_kinetic);
+            println!("  E_pot:    {:.4e}", diag.energy_potential);
+            println!("  |L|:      {:.4e}", diag.angular_momentum_magnitude());
+        }
     }
 
     Ok(())
 }
 
-/// Load and merge configuration from CLI arguments.
-fn load_config(cli: &Cli) -> Result<Configuration, HermesError> {
-    let file_override = if let Some(ref path) = cli.config_file {
-        let content = std::fs::read_to_string(path)?;
-        let value: toml::Value = toml::from_str(&content)
-            .map_err(|e| HermesError::Config(format!("failed to parse {path}: {e}")))?;
-        Some(value)
-    } else {
-        None
-    };
+// ============================================================================
+// Live: simulation on spawned thread, viewer on main
+// ============================================================================
 
-    // Build programmatic overrides from CLI flags.
-    let mut overrides = toml::map::Map::new();
+#[cfg(feature = "vis")]
+fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
+    let save_dir = cli.save_directory();
+    let seed = cli.seed;
+    let quiet = cli.quiet;
+    let scene_name = cli.scene.clone();
+    let box_length = config.simulation.box_length;
 
-    if cli.steps.is_some() || cli.particles.is_some() {
-        if let Some(steps) = cli.steps {
-            let mut time = toml::map::Map::new();
-            time.insert("n_steps".to_string(), toml::Value::Integer(steps as i64));
-            overrides.insert("time".to_string(), toml::Value::Table(time));
-        }
-        if let Some(particles) = cli.particles {
-            let mut sim = toml::map::Map::new();
-            sim.insert(
-                "n_particles".to_string(),
-                toml::Value::Integer(particles as i64),
-            );
-            // Also set n_cells to match particles for simplicity.
-            sim.insert(
-                "n_cells".to_string(),
-                toml::Value::Integer(particles as i64),
-            );
-            overrides.insert("simulation".to_string(), toml::Value::Table(sim));
-        }
+    if !quiet {
+        println!("Starting live viewer + simulation...");
+        println!("(close the viewer window to exit)");
+        println!();
     }
 
-    let programmatic = if overrides.is_empty() {
-        None
-    } else {
-        Some(toml::Value::Table(overrides))
-    };
+    // Simulation → Router.
+    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(8);
+    let sender = SnapshotSender::new(sim_tx);
 
-    build_configuration(file_override.as_ref(), programmatic.as_ref())
+    let mut consumer_senders = Vec::new();
+    let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
+
+    // Disk writer (optional).
+    if let Some(ref dir) = save_dir {
+        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(16);
+        consumer_senders.push(disk_tx);
+        handles.push(spawn_disk_writer(disk_rx, dir.clone()));
+    }
+
+    // Precompute → Viewer channel.
+    let (precompute_tx, precompute_rx) = mpsc::sync_channel::<PipelineMessage>(4);
+    consumer_senders.push(precompute_tx);
+
+    let (frame_tx, frame_rx) = mpsc::sync_channel::<pipeline::ViewerMessage>(4);
+    handles.push(pipeline::spawn_precompute(
+        precompute_rx,
+        frame_tx,
+        box_length,
+    ));
+
+    // Router.
+    let router_handle = spawn_router(router_rx, consumer_senders);
+
+    // Simulation thread.
+    let sim_handle = thread::Builder::new()
+        .name("simulation".to_string())
+        .spawn(move || -> Result<(), HermesError> {
+            let scene = scene_by_name(&scene_name)?;
+            let mut sim = scene.initialize(&config, seed)?;
+            sim.run_into_pipeline(&sender, |_, _| {})?;
+
+            Ok(())
+        })
+        .expect("failed to spawn simulation thread");
+
+    // Main thread: viewer event loop.
+    pipeline::run_viewer_main_thread(frame_rx);
+
+    // Clean up.
+    let _ = sim_handle.join();
+    let _ = router_handle.join();
+    for h in handles {
+        let _ = h.join();
+    }
+
+    Ok(())
 }
 
-fn print_header(config: &Configuration, cli: &Cli) {
-    println!("Hermes — {}", cli.scene);
-    println!("{}", "=".repeat(40));
-    println!("Grid:       {}³ cells", config.simulation.n_cells);
-    println!(
-        "Particles:  {}³ = {}",
-        config.simulation.n_particles,
-        config.simulation.n_particles.pow(3)
-    );
-    println!(
-        "Box:        {:.0} kpc ({:.0} Mpc)",
-        config.simulation.box_length,
-        config.simulation.box_length / 1000.0
-    );
-    println!(
-        "Redshift:   z = {:.0} → z = {:.1}",
-        1.0 / config.time.scale_factor_initial - 1.0,
-        1.0 / config.time.scale_factor_final - 1.0,
-    );
-    println!("Steps:      {}", config.time.n_steps);
-    println!("Seed:       {}", cli.seed);
-    println!();
-}
+// ============================================================================
+// Playback / Record
+// ============================================================================
 
-/// Play back saved snapshots (interactive viewer or record to GIF).
 fn run_playback(dir: &str, cli: &Cli) -> Result<(), HermesError> {
-    // Recording mode: render to GIF without a window.
     if let Some(ref output_path) = cli.record {
         return record_to_gif(dir, output_path, cli);
     }
+
     #[cfg(not(feature = "vis"))]
     {
         let _ = (dir, cli);
@@ -199,146 +232,33 @@ fn run_playback(dir: &str, cli: &Cli) -> Result<(), HermesError> {
 
     #[cfg(feature = "vis")]
     {
-        use kiss3d::light::Light;
-        use kiss3d::nalgebra::Point3;
-        use kiss3d::window::Window;
-
-        use crate::colormap::colormap_hot;
-        use crate::io::snapshot::load_snapshot;
-
-        // Load all snapshots.
-        let mut snapshots = Vec::new();
-        let mut step = 0_usize;
-        loop {
-            let path = format!("{dir}/snapshot-{step:05}.bin");
-            match load_snapshot(std::path::Path::new(&path)) {
-                Ok(snapshot) => {
-                    snapshots.push(snapshot);
-                    step += 1;
-                }
-                Err(_) => break,
-            }
-        }
-
-        if snapshots.is_empty() {
-            return Err(HermesError::Config(format!("no snapshots found in {dir}/")));
-        }
-
         if !cli.quiet {
-            println!("Loaded {} snapshots from {dir}/", snapshots.len());
-            println!(
-                "Scale factor: {:.4} → {:.4}",
-                snapshots.first().unwrap().scale_factor,
-                snapshots.last().unwrap().scale_factor,
-            );
-            println!("Particles: {}", snapshots[0].particle_count());
-            println!("Precomputing display data...");
+            println!("Playback from {dir}/");
         }
 
-        // Estimate box length from particle positions.
-        let box_length = snapshots[0]
-            .positions
-            .iter()
-            .flat_map(|pos| (0..3).map(move |d| pos.component(&[d]).abs()))
-            .fold(0.0_f64, f64::max)
-            * 1.1;
-        let scale = 1.0 / box_length as f32;
-
-        // Precompute frames.
-        struct FrameData {
-            positions: Vec<[f32; 3]>,
-            colors: Vec<[f32; 3]>,
-        }
-
-        let frames: Vec<FrameData> = snapshots
-            .iter()
-            .map(|snapshot| {
-                let speeds: Vec<f64> = snapshot.momenta.iter().map(|mom| mom.norm()).collect();
-                let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
-                let speed_min = speeds.iter().copied().fold(f64::MAX, f64::min);
-                let speed_range = (speed_max - speed_min).max(1e-30);
-
-                let mut positions = Vec::with_capacity(snapshot.particle_count());
-                let mut colors = Vec::with_capacity(snapshot.particle_count());
-
-                for (pos, &speed) in snapshot.positions.iter().zip(speeds.iter()) {
-                    positions.push([
-                        pos.component(&[0]) as f32 * scale - 0.5,
-                        pos.component(&[1]) as f32 * scale - 0.5,
-                        pos.component(&[2]) as f32 * scale - 0.5,
-                    ]);
-                    let normalized = ((speed - speed_min) / speed_range).clamp(0.0, 1.0);
-                    colors.push(colormap_hot(normalized));
-                }
-
-                FrameData { positions, colors }
-            })
-            .collect();
-
-        if !cli.quiet {
-            println!("Playing at ~{} fps (close window to exit)", cli.fps);
-        }
-
-        let mut window = Window::new_with_size("hermes — playback", 1024, 768);
-        window.set_background_color(0.0, 0.0, 0.0);
-        window.set_light(Light::StickToCamera);
-        window.set_point_size(3.0);
-
-        let n_frames = frames.len();
-        let mut frame_index = 0_usize;
-        let frame_duration = std::time::Duration::from_millis(1000 / cli.fps.max(1));
-        let mut last_frame_time = std::time::Instant::now();
-
-        while window.render() {
-            if last_frame_time.elapsed() >= frame_duration {
-                frame_index = (frame_index + 1) % n_frames;
-                last_frame_time = std::time::Instant::now();
-            }
-
-            let frame = &frames[frame_index];
-            for (pos, color) in frame.positions.iter().zip(frame.colors.iter()) {
-                let point = Point3::new(pos[0], pos[1], pos[2]);
-                let color_point = Point3::new(color[0], color[1], color[2]);
-                window.draw_point(&point, &color_point);
-            }
-        }
-
-        Ok(())
+        pipeline::run_playback_viewer(dir, cli.fps)
     }
 }
 
-/// Record snapshots to a GIF file via software rasterization.
 fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesError> {
     use crate::colormap::colormap_hot;
     use crate::io::snapshot::load_snapshot;
 
-    let mut snapshots = Vec::new();
-    let mut step = 0_usize;
-    loop {
-        let path = format!("{dir}/snapshot-{step:05}.bin");
-        match load_snapshot(std::path::Path::new(&path)) {
-            Ok(snapshot) => {
-                snapshots.push(snapshot);
-                step += 1;
-            }
-            Err(_) => break,
-        }
-    }
-
-    if snapshots.is_empty() {
+    let total = pipeline::count_snapshots(dir);
+    if total == 0 {
         return Err(HermesError::Config(format!("no snapshots found in {dir}/")));
     }
 
     if !cli.quiet {
-        println!("Recording {} frames to {output_path}...", snapshots.len());
+        println!("Recording {total} frames to {output_path}...");
     }
 
     let width = 512_u32;
     let height = 512_u32;
     let point_radius = 1_i32;
 
-    // Estimate box length.
-    let box_length = snapshots[0]
+    let first = load_snapshot(std::path::Path::new(&format!("{dir}/snapshot-00000.bin")))?;
+    let box_length = first
         .positions
         .iter()
         .flat_map(|pos| (0..3).map(move |d| pos.component(&[d]).abs()))
@@ -346,7 +266,10 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
         * 1.1;
     let scale = 1.0 / box_length;
 
-    // Create GIF encoder.
+    if let Some(parent) = std::path::Path::new(output_path).parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+
     let output_file = std::fs::File::create(output_path)
         .map_err(|e| HermesError::Config(format!("failed to create {output_path}: {e}")))?;
     let mut encoder = image::codecs::gif::GifEncoder::new(output_file);
@@ -354,9 +277,9 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
         1000 / cli.fps.max(1),
     ));
 
-    use indicatif::{ProgressBar, ProgressStyle};
     let progress = if !cli.quiet {
-        let progress_bar = ProgressBar::new(snapshots.len() as u64);
+        use indicatif::{ProgressBar, ProgressStyle};
+        let progress_bar = ProgressBar::new(total as u64);
         progress_bar.set_style(
             ProgressStyle::with_template(
                 "{spinner:.cyan} [{bar:40.cyan/dark.grey}] {pos}/{len} frames",
@@ -369,22 +292,21 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
         None
     };
 
-    for snapshot in &snapshots {
-        // Compute velocity colors.
+    for step in 0..total {
+        let path = format!("{dir}/snapshot-{step:05}.bin");
+        let snapshot = load_snapshot(std::path::Path::new(&path))?;
+
         let speeds: Vec<f64> = snapshot.momenta.iter().map(|mom| mom.norm()).collect();
         let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
         let speed_min = speeds.iter().copied().fold(f64::MAX, f64::min);
         let speed_range = (speed_max - speed_min).max(1e-30);
 
-        // Rasterize: project onto XY plane (simple orthographic).
-        // Start with opaque black background.
         let mut pixels = vec![0_u8; (width * height * 4) as usize];
         for pixel in pixels.chunks_exact_mut(4) {
             pixel[3] = 255;
         }
 
         for (pos, &speed) in snapshot.positions.iter().zip(speeds.iter()) {
-            // Map positions from [0, box_length] to [0, 1].
             let x_norm = pos.component(&[0]) * scale;
             let y_norm = pos.component(&[1]) * scale;
 
@@ -397,18 +319,15 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
             let g = (color[1] * 255.0) as u8;
             let b = (color[2] * 255.0) as u8;
 
-            // Draw a small filled square for each particle.
             for dy in -point_radius..=point_radius {
                 for dx in -point_radius..=point_radius {
                     let px = pixel_x + dx;
                     let py = pixel_y + dy;
                     if px >= 0 && px < width as i32 && py >= 0 && py < height as i32 {
                         let offset = ((py as u32 * width + px as u32) * 4) as usize;
-                        // Additive blending: brighten overlapping particles.
                         pixels[offset] = pixels[offset].saturating_add(r);
                         pixels[offset + 1] = pixels[offset + 1].saturating_add(g);
                         pixels[offset + 2] = pixels[offset + 2].saturating_add(b);
-                        pixels[offset + 3] = 255;
                     }
                 }
             }
@@ -435,8 +354,75 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
     }
 
     if !cli.quiet {
-        println!("Saved {output_path} ({} frames)", snapshots.len());
+        println!("Saved {output_path} ({total} frames)");
     }
 
     Ok(())
+}
+
+// ============================================================================
+// Config loading
+// ============================================================================
+
+fn load_config(cli: &Cli) -> Result<Configuration, HermesError> {
+    let file_override = if let Some(ref path) = cli.config_file {
+        let content = std::fs::read_to_string(path)?;
+        let value: toml::Value = toml::from_str(&content)
+            .map_err(|e| HermesError::Config(format!("failed to parse {path}: {e}")))?;
+        Some(value)
+    } else {
+        None
+    };
+
+    let mut overrides = toml::map::Map::new();
+
+    if let Some(steps) = cli.steps {
+        let mut time = toml::map::Map::new();
+        time.insert("n_steps".to_string(), toml::Value::Integer(steps as i64));
+        overrides.insert("time".to_string(), toml::Value::Table(time));
+    }
+    if let Some(particles) = cli.particles {
+        let mut sim = toml::map::Map::new();
+        sim.insert(
+            "n_particles".to_string(),
+            toml::Value::Integer(particles as i64),
+        );
+        sim.insert(
+            "n_cells".to_string(),
+            toml::Value::Integer(particles as i64),
+        );
+        overrides.insert("simulation".to_string(), toml::Value::Table(sim));
+    }
+
+    let programmatic = if overrides.is_empty() {
+        None
+    } else {
+        Some(toml::Value::Table(overrides))
+    };
+
+    crate::config::build_configuration(file_override.as_ref(), programmatic.as_ref())
+}
+
+fn print_header(config: &Configuration, cli: &Cli) {
+    println!("Hermes — {}", cli.scene);
+    println!("{}", "=".repeat(40));
+    println!("Grid:       {}³ cells", config.simulation.n_cells);
+    println!(
+        "Particles:  {}³ = {}",
+        config.simulation.n_particles,
+        config.simulation.n_particles.pow(3)
+    );
+    println!(
+        "Box:        {:.0} kpc ({:.0} Mpc)",
+        config.simulation.box_length,
+        config.simulation.box_length / 1000.0
+    );
+    println!(
+        "Redshift:   z = {:.0} → z = {:.1}",
+        1.0 / config.time.scale_factor_initial - 1.0,
+        1.0 / config.time.scale_factor_final - 1.0,
+    );
+    println!("Steps:      {}", config.time.n_steps);
+    println!("Seed:       {}", cli.seed);
+    println!();
 }
