@@ -261,6 +261,7 @@ pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFr
 /// completes. Close the window to exit.
 #[cfg(feature = "vis")]
 pub fn run_viewer_main_thread(frame_rx: Receiver<ViewerMessage>) {
+    use kiss3d::camera::ArcBall;
     use kiss3d::light::Light;
     use kiss3d::nalgebra::Point3;
     use kiss3d::window::Window;
@@ -270,9 +271,14 @@ pub fn run_viewer_main_thread(frame_rx: Receiver<ViewerMessage>) {
     window.set_light(Light::StickToCamera);
     window.set_point_size(3.0);
 
+    // Camera at a 3/4 angle, zoomed out to see the full box.
+    let eye = Point3::new(0.8, 0.6, 1.0);
+    let at = Point3::new(0.0, 0.0, 0.0);
+    let mut camera = ArcBall::new(eye, at);
+
     let mut current_frame: Option<Box<DisplayFrame>> = None;
 
-    while window.render() {
+    while window.render_with_camera(&mut camera) {
         while let Ok(msg) = frame_rx.try_recv() {
             match msg {
                 ViewerMessage::Frame(frame) => current_frame = Some(frame),
@@ -391,12 +397,17 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
     window.set_light(Light::StickToCamera);
     window.set_point_size(3.0);
 
+    // Camera at a 3/4 angle, zoomed out to see the full box.
+    let eye = Point3::new(0.8, 0.6, 1.0);
+    let at = Point3::new(0.0, 0.0, 0.0);
+    let mut camera = kiss3d::camera::ArcBall::new(eye, at);
+
     let n_frames = frames.len();
     let frame_duration = std::time::Duration::from_millis(1000 / fps.max(1));
     let mut last_frame_time = std::time::Instant::now();
     let mut frame_index = 0_usize;
 
-    while window.render() {
+    while window.render_with_camera(&mut camera) {
         if last_frame_time.elapsed() >= frame_duration {
             frame_index = (frame_index + 1) % n_frames;
             last_frame_time = std::time::Instant::now();

@@ -1,13 +1,14 @@
 # Galaxy group scene defaults.
-# Smaller periodic box focused on group-scale structure formation.
-# The box is sized so periodic images are well-separated (~3 Mpc).
+# A 10 Mpc periodic box — large enough for group-scale structure
+# (filaments, a few halos, voids) with better-resolved dynamics
+# than the full cosmic web.
 
 [simulation]
 n_cells      = 64
 n_particles  = 64
-box_length   = 3000.0     # 3 Mpc in kpc
+box_length   = 10000.0    # 10 Mpc in kpc
 
 [time]
-scale_factor_initial = 0.05   # z ~ 19
+scale_factor_initial = 0.02   # z ~ 49
 scale_factor_final   = 1.0    # z = 0
 n_steps              = 300
