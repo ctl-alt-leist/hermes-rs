@@ -13,7 +13,6 @@ use crate::io::snapshot::Snapshot;
 use crate::physics::cosmology::Cosmology;
 use crate::physics::diagnostics::Diagnostics;
 use crate::physics::grid::Grid;
-use crate::physics::initial::zeldovich_init;
 use crate::physics::integrator::{midpoint, scale_factor_schedule, step_kdk};
 use crate::physics::particles::Particles;
 use crate::physics::poisson::PoissonSolver;
@@ -34,25 +33,24 @@ pub struct Simulation {
 }
 
 impl Simulation {
-    /// Construct a simulation from a configuration.
+    /// Construct a simulation from a scene and configuration.
     ///
-    /// Initializes the grid, Poisson solver, and particles via Zel'dovich
-    /// approximation. Records initial diagnostics.
-    pub fn from_config(config: Configuration, seed: u64) -> Result<Self, HermesError> {
+    /// The scene handles particle initialization; this method handles
+    /// the generic setup (grid, solver, diagnostics).
+    pub fn from_scene(
+        scene: &dyn crate::scenes::Scene,
+        config: Configuration,
+        seed: u64,
+    ) -> Result<Self, HermesError> {
         config.cosmology.validate()?;
+        scene.validate(&config)?;
 
         let grid = Grid::new(config.simulation.n_cells, config.simulation.box_length);
         let mut solver = PoissonSolver::new(&grid);
         let cosmology = config.cosmology.clone();
         let scale_factor = config.time.scale_factor_initial;
 
-        let particles = zeldovich_init(
-            config.simulation.n_particles,
-            &grid,
-            &cosmology,
-            scale_factor,
-            seed,
-        )?;
+        let particles = scene.initialize_particles(&grid, &cosmology, &config, seed)?;
 
         let initial_diagnostics =
             Diagnostics::compute(&particles, &grid, &cosmology, &mut solver, scale_factor);
@@ -67,6 +65,15 @@ impl Simulation {
             step: 0,
             scale_factor,
         })
+    }
+
+    /// Construct from config using the default cosmic-web scene.
+    ///
+    /// Convenience method for tests and backward compatibility.
+    pub fn from_config(config: Configuration, seed: u64) -> Result<Self, HermesError> {
+        let scene = crate::scenes::cosmic_web::CosmicWeb;
+
+        Self::from_scene(&scene, config, seed)
     }
 
     /// Run the full simulation, notifying observers at snapshot intervals.

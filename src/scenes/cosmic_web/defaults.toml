@@ -1,0 +1,10 @@
+# Cosmic web scene defaults.
+# Large periodic box with Zel'dovich initialization from z ~ 49.
+
+[simulation]
+box_length = 100000.0    # 100 Mpc in kpc
+
+[time]
+scale_factor_initial = 0.02   # z ~ 49
+scale_factor_final   = 1.0    # z = 0
+n_steps              = 200
