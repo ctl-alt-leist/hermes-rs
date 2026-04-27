@@ -57,7 +57,7 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     let total_steps = config.time.n_steps;
 
     // Simulation → Router channel.
-    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(8);
+    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(512);
     let sender = SnapshotSender::new(sim_tx);
 
     // Build consumer list.
@@ -68,7 +68,7 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
         if !quiet {
             println!("Saving snapshots to {dir}/");
         }
-        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(16);
+        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(512);
         consumer_senders.push(pipeline::ConsumerConfig {
             tx: disk_tx,
             droppable: false,
@@ -166,7 +166,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     }
 
     // Simulation → Router.
-    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(8);
+    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(512);
     let sender = SnapshotSender::new(sim_tx);
 
     let mut consumer_senders: Vec<pipeline::ConsumerConfig> = Vec::new();
@@ -174,7 +174,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
 
     // Disk writer (optional).
     if let Some(ref dir) = save_dir {
-        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(16);
+        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(512);
         consumer_senders.push(pipeline::ConsumerConfig {
             tx: disk_tx,
             droppable: false,
