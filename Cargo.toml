@@ -1,0 +1,15 @@
+[package]
+name = "hermes-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+morphis = { path = "../morphis-rs" }
+ndarray = "0.16"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+toml = "0.8"
+
+[dev-dependencies]
+proptest = "1"
+approx = "0.5"

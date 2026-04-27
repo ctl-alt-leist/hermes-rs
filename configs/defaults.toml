@@ -1,0 +1,26 @@
+# Hermes default configuration — Planck 2018 cosmology, starter-grade resolution.
+
+[cosmology]
+hubble         = 0.674
+omega_m        = 0.315
+omega_b        = 0.0493
+omega_r        = 9.15e-5
+omega_k        = 0.0
+omega_lambda   = 0.6849085
+sigma_8        = 0.811
+spectral_index = 0.965
+
+[simulation]
+n_cells      = 64
+n_particles  = 64
+box_length   = 100000.0   # comoving box side in kpc (≈ 100 Mpc)
+
+[time]
+scale_factor_initial = 0.02   # z ≈ 49
+scale_factor_final   = 1.0    # z = 0
+n_steps              = 200
+stepping             = "log_a"
+
+[output]
+directory         = "output"
+snapshot_interval = 10
