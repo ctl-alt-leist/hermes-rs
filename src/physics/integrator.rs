@@ -14,12 +14,12 @@
 //! 4. Half-kick:  p → p + F × kick_factor(a_{n+1/2}, a_{n+1})
 //! ```
 
-use crate::cic::{ParticleForces, assign_density, interpolate_force};
-use crate::cosmology::Cosmology;
 use crate::error::HermesError;
-use crate::grid::Grid;
-use crate::particles::Particles;
-use crate::poisson::PoissonSolver;
+use crate::physics::cic::{ParticleForces, assign_density, interpolate_force};
+use crate::physics::cosmology::Cosmology;
+use crate::physics::grid::Grid;
+use crate::physics::particles::Particles;
+use crate::physics::poisson::PoissonSolver;
 
 /// Apply a momentum kick to all particles: p → p + F × kick_factor.
 ///

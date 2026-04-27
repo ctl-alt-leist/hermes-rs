@@ -7,8 +7,8 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::cosmology::Cosmology;
 use crate::error::HermesError;
+use crate::physics::cosmology::Cosmology;
 
 // ============================================================================
 // Configuration types

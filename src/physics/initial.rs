@@ -21,10 +21,10 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
 use crate::algebra::vector_from_components;
-use crate::cosmology::Cosmology;
 use crate::error::HermesError;
-use crate::grid::Grid;
-use crate::particles::Particles;
+use crate::physics::cosmology::Cosmology;
+use crate::physics::grid::Grid;
+use crate::physics::particles::Particles;
 
 // ============================================================================
 // Eisenstein & Hu transfer function

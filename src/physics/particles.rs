@@ -14,7 +14,7 @@ use morphis::vector::Vector;
 use ndarray::Array2;
 
 use crate::algebra::{components_from_vector, euclidean_3, vector_from_components};
-use crate::grid::Grid;
+use crate::physics::grid::Grid;
 
 /// Dark matter (or single-species) particle ensemble.
 #[derive(Debug, Clone)]

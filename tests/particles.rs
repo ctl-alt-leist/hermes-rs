@@ -1,6 +1,6 @@
 use hermes_rs::algebra::{components_from_vector, vector_from_components};
-use hermes_rs::grid::Grid;
-use hermes_rs::particles::Particles;
+use hermes_rs::physics::grid::Grid;
+use hermes_rs::physics::particles::Particles;
 
 // ============================================================================
 // Construction

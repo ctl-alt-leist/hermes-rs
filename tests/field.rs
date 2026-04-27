@@ -1,6 +1,6 @@
 use hermes_rs::algebra::{euclidean_3, vector_from_components};
-use hermes_rs::field::{ScalarField, VectorField};
-use hermes_rs::grid::Grid;
+use hermes_rs::physics::field::{ScalarField, VectorField};
+use hermes_rs::physics::grid::Grid;
 
 // ============================================================================
 // ScalarField

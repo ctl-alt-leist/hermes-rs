@@ -14,9 +14,9 @@ use morphis::vector::Vector;
 use ndarray::Array2;
 
 use crate::algebra::{euclidean_3, vector_from_components};
-use crate::field::{ScalarField, VectorField};
-use crate::grid::Grid;
-use crate::particles::Particles;
+use crate::physics::field::{ScalarField, VectorField};
+use crate::physics::grid::Grid;
+use crate::physics::particles::Particles;
 
 // ============================================================================
 // ParticleForces — morphis-aware per-particle force result

@@ -1,5 +1,5 @@
-use hermes_rs::constants::{CRITICAL_DENSITY_FACTOR, H100};
-use hermes_rs::cosmology::{Cosmology, einstein_de_sitter, planck_2018};
+use hermes_rs::physics::constants::{CRITICAL_DENSITY_FACTOR, H100};
+use hermes_rs::physics::cosmology::{Cosmology, einstein_de_sitter, planck_2018};
 
 // ============================================================================
 // Einstein-de Sitter analytic solutions

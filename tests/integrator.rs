@@ -1,11 +1,11 @@
 use hermes_rs::algebra::vector_from_components;
-use hermes_rs::cic::ParticleForces;
-use hermes_rs::cosmology::planck_2018;
-use hermes_rs::grid::Grid;
-use hermes_rs::initial::zeldovich_init;
-use hermes_rs::integrator::{drift, kick, midpoint, scale_factor_schedule, step_kdk};
-use hermes_rs::particles::Particles;
-use hermes_rs::poisson::PoissonSolver;
+use hermes_rs::physics::cic::ParticleForces;
+use hermes_rs::physics::cosmology::planck_2018;
+use hermes_rs::physics::grid::Grid;
+use hermes_rs::physics::initial::zeldovich_init;
+use hermes_rs::physics::integrator::{drift, kick, midpoint, scale_factor_schedule, step_kdk};
+use hermes_rs::physics::particles::Particles;
+use hermes_rs::physics::poisson::PoissonSolver;
 use morphis::vector::Vector;
 
 // ============================================================================

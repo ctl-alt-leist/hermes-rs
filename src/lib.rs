@@ -1,16 +1,7 @@
 pub mod algebra;
-pub mod cic;
 pub mod config;
-pub mod constants;
-pub mod cosmology;
-pub mod diagnostics;
 pub mod error;
-pub mod field;
-pub mod grid;
-pub mod initial;
-pub mod integrator;
-pub mod particles;
-pub mod poisson;
-pub mod simulation;
+pub mod physics;
+
 #[cfg(feature = "vis")]
 pub mod vis;

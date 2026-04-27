@@ -13,7 +13,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use hermes_rs::config::build_configuration;
-use hermes_rs::simulation::Simulation;
+use hermes_rs::physics::simulation::Simulation;
 use hermes_rs::vis;
 
 fn main() {

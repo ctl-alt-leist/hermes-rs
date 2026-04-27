@@ -1,8 +1,8 @@
 use hermes_rs::algebra::vector_from_array;
-use hermes_rs::cic::{assign_density, interpolate_force};
-use hermes_rs::field::VectorField;
-use hermes_rs::grid::Grid;
-use hermes_rs::particles::Particles;
+use hermes_rs::physics::cic::{assign_density, interpolate_force};
+use hermes_rs::physics::field::VectorField;
+use hermes_rs::physics::grid::Grid;
+use hermes_rs::physics::particles::Particles;
 
 // ============================================================================
 // Mass conservation

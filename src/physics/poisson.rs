@@ -16,9 +16,9 @@ use ndarray::Array3;
 use ndrustfft::{FftHandler, R2cFftHandler, ndfft, ndfft_r2c, ndifft, ndifft_r2c};
 use num_complex::Complex64;
 
-use crate::constants::G as GRAV;
-use crate::field::{ScalarField, VectorField};
-use crate::grid::Grid;
+use crate::physics::constants::G as GRAV;
+use crate::physics::field::{ScalarField, VectorField};
+use crate::physics::grid::Grid;
 
 /// FFT-based Poisson solver with precomputed Green's function.
 pub struct PoissonSolver {

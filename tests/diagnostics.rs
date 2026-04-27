@@ -1,9 +1,9 @@
-use hermes_rs::cosmology::planck_2018;
-use hermes_rs::diagnostics::Diagnostics;
-use hermes_rs::grid::Grid;
-use hermes_rs::initial::zeldovich_init;
-use hermes_rs::particles::Particles;
-use hermes_rs::poisson::PoissonSolver;
+use hermes_rs::physics::cosmology::planck_2018;
+use hermes_rs::physics::diagnostics::Diagnostics;
+use hermes_rs::physics::grid::Grid;
+use hermes_rs::physics::initial::zeldovich_init;
+use hermes_rs::physics::particles::Particles;
+use hermes_rs::physics::poisson::PoissonSolver;
 
 // ============================================================================
 // Stationary particles

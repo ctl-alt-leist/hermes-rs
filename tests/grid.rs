@@ -1,4 +1,4 @@
-use hermes_rs::grid::Grid;
+use hermes_rs::physics::grid::Grid;
 
 // ============================================================================
 // Construction and derived quantities

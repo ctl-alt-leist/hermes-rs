@@ -12,8 +12,8 @@
 /// factor is related to redshift by a = 1/(1+z).
 use serde::Deserialize;
 
-use crate::constants::{CRITICAL_DENSITY_FACTOR, H100};
 use crate::error::HermesError;
+use crate::physics::constants::{CRITICAL_DENSITY_FACTOR, H100};
 
 // ============================================================================
 // Cosmology struct
