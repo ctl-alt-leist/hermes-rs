@@ -6,3 +6,4 @@ pub mod error;
 pub mod field;
 pub mod grid;
 pub mod particles;
+pub mod poisson;

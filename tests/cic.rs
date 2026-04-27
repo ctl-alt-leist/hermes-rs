@@ -103,11 +103,11 @@ fn particle_at_cell_corner() {
     for dm0 in 0..2_usize {
         for dm1 in 0..2_usize {
             for dm2 in 0..2_usize {
-                let val = density.get(2 + dm0, 2 + dm1, 2 + dm2);
-                let rel_err = (val - expected_per_cell).abs() / expected_per_cell;
+                let density_cell = density.get(2 + dm0, 2 + dm1, 2 + dm2);
+                let rel_err = (density_cell - expected_per_cell).abs() / expected_per_cell;
                 assert!(
                     rel_err < 1e-12,
-                    "corner cell ({}, {}, {}): expected {expected_per_cell}, got {val}",
+                    "corner cell ({}, {}, {}): expected {expected_per_cell}, got {density_cell}",
                     2 + dm0,
                     2 + dm1,
                     2 + dm2
@@ -132,16 +132,16 @@ fn particle_at_cell_face_center() {
     // Mass splits 50/50 between cells (3,3,3) and (4,3,3).
     let expected = particles.mass_particle / (2.0 * grid.cell_volume());
 
-    let val_left = density.get(3, 3, 3);
-    let val_right = density.get(4, 3, 3);
+    let density_left = density.get(3, 3, 3);
+    let density_right = density.get(4, 3, 3);
 
     assert!(
-        (val_left - expected).abs() / expected < 1e-12,
-        "face left: expected {expected}, got {val_left}"
+        (density_left - expected).abs() / expected < 1e-12,
+        "face left: expected {expected}, got {density_left}"
     );
     assert!(
-        (val_right - expected).abs() / expected < 1e-12,
-        "face right: expected {expected}, got {val_right}"
+        (density_right - expected).abs() / expected < 1e-12,
+        "face right: expected {expected}, got {density_right}"
     );
 }
 
@@ -252,8 +252,11 @@ fn density_non_negative() {
     let particles = Particles::on_lattice(8, &grid, 1e-7);
     let density = assign_density(&particles, &grid);
 
-    for &val in density.data.iter() {
-        assert!(val >= 0.0, "density must be non-negative, got {val}");
+    for &density_cell in density.data.iter() {
+        assert!(
+            density_cell >= 0.0,
+            "density must be non-negative, got {density_cell}"
+        );
     }
 }
 
@@ -269,11 +272,11 @@ fn lattice_produces_uniform_density() {
     for m0 in 0..8 {
         for m1 in 0..8 {
             for m2 in 0..8 {
-                let val = density.get(m0, m1, m2);
-                let rel_err = (val - density_mean).abs() / density_mean;
+                let density_cell = density.get(m0, m1, m2);
+                let rel_err = (density_cell - density_mean).abs() / density_mean;
                 assert!(
                     rel_err < 1e-12,
-                    "cell ({m0},{m1},{m2}): expected {density_mean}, got {val}"
+                    "cell ({m0},{m1},{m2}): expected {density_mean}, got {density_cell}"
                 );
             }
         }
