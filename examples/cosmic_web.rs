@@ -1,10 +1,9 @@
-//! Minimal cosmological N-body simulation.
+//! Cosmological N-body simulation with live visualization.
 //!
-//! Runs a 32³ particle-mesh simulation from z ≈ 49 to z = 0 and produces:
-//!   - A 2D projected density slice (output/density_slice.png)
-//!   - A matter power spectrum (output/power_spectrum.png)
-//!   - Conservation diagnostics (output/conservation.png)
-//!   - An interactive 3D particle viewer (opens a window)
+//! Runs a 32³ particle-mesh simulation from z ≈ 49 to z = 0 with:
+//!   - Live 3D viewer updating as the simulation runs
+//!   - Snapshots saved to ./data/ for post-hoc analysis
+//!   - Post-run plots: density slice, power spectrum, conservation
 //!
 //! Run with:
 //!   cargo run --example cosmic_web --features vis --release
@@ -13,8 +12,10 @@ use std::path::Path;
 use std::time::Instant;
 
 use hermes_rs::config::build_configuration;
+use hermes_rs::io::observer::{FileObserver, Observer};
 use hermes_rs::physics::simulation::Simulation;
 use hermes_rs::vis;
+use hermes_rs::vis::LiveObserver;
 
 fn main() {
     let config = build_configuration(None, Some(&small_universe())).expect("config");
@@ -40,6 +41,8 @@ fn main() {
     println!("Steps:      {}", config.time.n_steps);
     println!();
 
+    let box_length = config.simulation.box_length;
+
     // Initialize.
     let start = Instant::now();
     let mut sim = Simulation::from_config(config, 42).expect("initialization failed");
@@ -54,10 +57,16 @@ fn main() {
     println!("  E_pot:    {:.4e}", initial_diag.energy_potential);
     println!();
 
-    // Run.
-    println!("Running simulation...");
+    // Set up observers: live 3D viewer + file snapshots.
+    let live_observer = LiveObserver::new(box_length, 4);
+    let file_observer = FileObserver::new("data");
+    let mut observers: Vec<Box<dyn Observer>> =
+        vec![Box::new(live_observer), Box::new(file_observer)];
+
+    // Run with live visualization.
+    println!("Running simulation with live viewer...");
     let run_start = Instant::now();
-    let n_steps = sim.run(&mut []).expect("simulation failed");
+    let n_steps = sim.run(&mut observers).expect("simulation failed");
     let run_time = run_start.elapsed();
 
     println!(
@@ -82,7 +91,7 @@ fn main() {
         final_diag.angular_momentum_magnitude()
     );
 
-    // Visualize.
+    // Post-run plots.
     println!();
     println!("Generating plots...");
 
@@ -93,7 +102,7 @@ fn main() {
         &sim.particles,
         &sim.grid,
         sim.grid.box_length / 2.0,
-        sim.grid.box_length / 8.0,
+        sim.grid.box_length / 4.0,
         &output.join("density_slice.png"),
         512,
     )
@@ -111,14 +120,9 @@ fn main() {
     vis::plot_conservation(&sim.diagnostics_history, &output.join("conservation.png"))
         .expect("conservation plot failed");
     println!("  output/conservation.png");
-
-    println!();
-    println!("Opening 3D viewer... (close window to exit)");
-    vis::render_particles_3d(&sim.particles, &sim.grid);
 }
 
 /// Small universe config: 32³ grid/particles, 50 Mpc box, 100 steps.
-/// Runs in ~30s on a laptop.
 fn small_universe() -> toml::Value {
     toml::from_str(
         r#"
