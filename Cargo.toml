@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-morphis = { path = "../morphis-rs" }
+morphis = { git = "https://github.com/ctl-alt-leist/morphis-rs.git" }
 ndarray = "0.16"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
