@@ -1,3 +1,4 @@
+use hermes_rs::algebra::{components_from_vector, vector_from_components};
 use hermes_rs::grid::Grid;
 use hermes_rs::particles::Particles;
 
@@ -62,7 +63,7 @@ fn lattice_positions_in_box() {
     let particles = Particles::on_lattice(8, &grid, 1e-7);
 
     for n in 0..particles.count() {
-        let pos = particles.position_of(n);
+        let pos = components_from_vector(&particles.position_of(n));
         for d in 0..3 {
             assert!(
                 pos[d] >= 0.0 && pos[d] < grid.box_length,
@@ -80,44 +81,129 @@ fn lattice_uniform_spacing() {
     let particles = Particles::on_lattice(4, &grid, 1e-7);
     let spacing = 100.0 / 4.0;
 
-    // First particle should be at (spacing/2, spacing/2, spacing/2)
     let pos = particles.position_of(0);
+    let c = components_from_vector(&pos);
     for d in 0..3 {
         assert!(
-            (pos[d] - spacing / 2.0).abs() < 1e-10,
+            (c[d] - spacing / 2.0).abs() < 1e-10,
             "first particle component {d} = {}, expected {}",
-            pos[d],
+            c[d],
             spacing / 2.0
         );
     }
 }
 
 // ============================================================================
-// Position/momentum access
+// Morphis-native position/momentum access
 // ============================================================================
 
 #[test]
-fn set_and_get_position() {
+fn set_and_get_position_morphis() {
     let mut particles = Particles::zeros(10, 1e10);
 
-    particles.set_position(5, [1.0, 2.0, 3.0]);
-    let pos = particles.position_of(5);
+    let pos = vector_from_components(1.0, 2.0, 3.0);
+    particles.set_position(5, &pos);
+    let got = particles.position_of(5);
 
-    assert!((pos[0] - 1.0).abs() < 1e-15);
-    assert!((pos[1] - 2.0).abs() < 1e-15);
-    assert!((pos[2] - 3.0).abs() < 1e-15);
+    assert_eq!(got.grade(), 1);
+    assert!((got.component(&[0]) - 1.0).abs() < 1e-15);
+    assert!((got.component(&[1]) - 2.0).abs() < 1e-15);
+    assert!((got.component(&[2]) - 3.0).abs() < 1e-15);
 }
 
 #[test]
-fn set_and_get_momentum() {
+fn set_and_get_momentum_morphis() {
     let mut particles = Particles::zeros(10, 1e10);
 
-    particles.set_momentum(3, [4.0, 5.0, 6.0]);
-    let mom = particles.momentum_of(3);
+    let mom = vector_from_components(4.0, 5.0, 6.0);
+    particles.set_momentum(3, &mom);
+    let got = particles.momentum_of(3);
 
-    assert!((mom[0] - 4.0).abs() < 1e-15);
-    assert!((mom[1] - 5.0).abs() < 1e-15);
-    assert!((mom[2] - 6.0).abs() < 1e-15);
+    assert_eq!(got.grade(), 1);
+    assert!((got.component(&[0]) - 4.0).abs() < 1e-15);
+    assert!((got.component(&[1]) - 5.0).abs() < 1e-15);
+    assert!((got.component(&[2]) - 6.0).abs() < 1e-15);
+}
+
+#[test]
+fn position_of_returns_grade_1_vector() {
+    let grid = Grid::new(8, 80.0);
+    let particles = Particles::on_lattice(4, &grid, 1e-7);
+    let pos = particles.position_of(0);
+
+    assert_eq!(pos.grade(), 1);
+    assert!(
+        pos.norm() > 0.0,
+        "lattice particle should have nonzero position"
+    );
+}
+
+// ============================================================================
+// Morphis-native derived quantities
+// ============================================================================
+
+#[test]
+fn total_momentum_zero_for_stationary() {
+    let particles = Particles::zeros(100, 1e10);
+    let total = particles.total_momentum();
+
+    assert!(
+        total.is_zero(1e-15),
+        "total momentum of stationary particles should be zero"
+    );
+}
+
+#[test]
+fn total_momentum_sums_correctly() {
+    let mut particles = Particles::zeros(2, 1e10);
+    particles.set_momentum(0, &vector_from_components(1.0, 0.0, 0.0));
+    particles.set_momentum(1, &vector_from_components(0.0, 2.0, 3.0));
+
+    let total = particles.total_momentum();
+    assert!((total.component(&[0]) - 1.0).abs() < 1e-12);
+    assert!((total.component(&[1]) - 2.0).abs() < 1e-12);
+    assert!((total.component(&[2]) - 3.0).abs() < 1e-12);
+}
+
+#[test]
+fn angular_momentum_is_bivector() {
+    let mut particles = Particles::zeros(1, 1e10);
+    particles.set_position(0, &vector_from_components(1.0, 0.0, 0.0));
+    particles.set_momentum(0, &vector_from_components(0.0, 1.0, 0.0));
+
+    let angular_momentum = particles.angular_momentum(0);
+
+    // x ∧ p for x along e0, p along e1 → bivector in the e0∧e1 plane.
+    assert_eq!(angular_momentum.grade(), 2);
+    assert!((angular_momentum.component(&[0, 1]) - 1.0).abs() < 1e-12);
+}
+
+#[test]
+fn total_angular_momentum_zero_for_symmetric_lattice() {
+    let grid = Grid::new(8, 80.0);
+    let particles = Particles::on_lattice(4, &grid, 1e-7);
+
+    // Stationary particles on a symmetric lattice: L = Σ x ∧ 0 = 0.
+    let total_angular_momentum = particles.total_angular_momentum();
+    assert!(
+        total_angular_momentum.is_zero(1e-15),
+        "angular momentum should be zero for stationary particles"
+    );
+}
+
+#[test]
+fn kinetic_energy_matches_norm_squared() {
+    let mut particles = Particles::zeros(1, 2.0);
+    particles.set_momentum(0, &vector_from_components(3.0, 4.0, 0.0));
+
+    let scale_factor = 1.0;
+    let energy = particles.kinetic_energy(scale_factor);
+
+    // E_k = |p|² / (2 m a²) = 25 / (2 * 2 * 1) = 6.25
+    assert!(
+        (energy - 6.25).abs() < 1e-12,
+        "kinetic energy: expected 6.25, got {energy}"
+    );
 }
 
 // ============================================================================
@@ -132,7 +218,6 @@ fn wrap_positions_identity() {
 
     particles.wrap_positions(&grid);
 
-    // All positions already in [0, 100), so wrapping should change nothing.
     for n in 0..particles.count() {
         for d in 0..3 {
             assert!(
@@ -148,10 +233,10 @@ fn wrap_positions_overflow() {
     let grid = Grid::new(64, 100.0);
     let mut particles = Particles::zeros(1, 1e10);
 
-    particles.set_position(0, [105.0, -3.0, 250.0]);
+    particles.set_position_components(0, [105.0, -3.0, 250.0]);
     particles.wrap_positions(&grid);
 
-    let pos = particles.position_of(0);
+    let pos = components_from_vector(&particles.position_of(0));
     assert!(
         (pos[0] - 5.0).abs() < 1e-10,
         "x: expected 5.0, got {}",
