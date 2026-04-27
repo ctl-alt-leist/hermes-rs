@@ -100,7 +100,9 @@ impl Simulation {
             forces_prev = Some(forces);
 
             // Record diagnostics at snapshot intervals.
-            if self.step.is_multiple_of(self.config.output.snapshot_interval)
+            if self
+                .step
+                .is_multiple_of(self.config.output.snapshot_interval)
                 || self.step == self.config.time.n_steps
             {
                 let diagnostics = Diagnostics::compute(
