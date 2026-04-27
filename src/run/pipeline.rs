@@ -14,8 +14,6 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender};
 use std::thread;
 
-use rayon::prelude::*;
-
 use crate::colormap::colormap_hot;
 use crate::io::snapshot::{Snapshot, save_snapshot};
 
@@ -196,31 +194,32 @@ pub fn spawn_precompute(
         .expect("failed to spawn precompute thread")
 }
 
-/// Convert a snapshot to a display-ready frame using rayon parallelism.
+/// Convert a snapshot to a display-ready frame.
+///
+/// Sequential for typical particle counts. Rayon overhead hurts at <100K
+/// particles — the thread pool scheduling costs more than the work.
 pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFrame {
     let scale = 1.0 / box_length as f32;
+    let n = snapshot.particle_count();
 
-    let speeds: Vec<f64> = snapshot.momenta.par_iter().map(|mom| mom.norm()).collect();
+    let speeds: Vec<f64> = snapshot.momenta.iter().map(|mom| mom.norm()).collect();
 
-    let speed_max = speeds.par_iter().copied().reduce(|| 1e-30_f64, f64::max);
-    let speed_min = speeds.par_iter().copied().reduce(|| f64::MAX, f64::min);
+    let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
+    let speed_min = speeds.iter().copied().fold(f64::MAX, f64::min);
     let speed_range = (speed_max - speed_min).max(1e-30);
 
-    let (positions, colors): (Vec<_>, Vec<_>) = snapshot
-        .positions
-        .par_iter()
-        .zip(speeds.par_iter())
-        .map(|(pos, &speed)| {
-            let p = [
-                pos.component(&[0]) as f32 * scale - 0.5,
-                pos.component(&[1]) as f32 * scale - 0.5,
-                pos.component(&[2]) as f32 * scale - 0.5,
-            ];
-            let normalized = ((speed - speed_min) / speed_range).clamp(0.0, 1.0);
-            let c = colormap_hot(normalized);
-            (p, c)
-        })
-        .unzip();
+    let mut positions = Vec::with_capacity(n);
+    let mut colors = Vec::with_capacity(n);
+
+    for (pos, &speed) in snapshot.positions.iter().zip(speeds.iter()) {
+        positions.push([
+            pos.component(&[0]) as f32 * scale - 0.5,
+            pos.component(&[1]) as f32 * scale - 0.5,
+            pos.component(&[2]) as f32 * scale - 0.5,
+        ]);
+        let normalized = ((speed - speed_min) / speed_range).clamp(0.0, 1.0);
+        colors.push(colormap_hot(normalized));
+    }
 
     DisplayFrame {
         positions,
@@ -333,53 +332,66 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
         })
         .expect("failed to spawn playback loader");
 
-    // Collect all frames for looping playback.
-    // The loader sends them as they're ready; we buffer them for replay.
+    // Collect all frames from the loader thread before starting playback.
+    // This ensures smooth rendering — no I/O during the render loop.
     let mut frames: Vec<Box<DisplayFrame>> = Vec::with_capacity(total);
-    let mut loading_done = false;
 
+    {
+        use indicatif::{ProgressBar, ProgressStyle};
+
+        let progress = ProgressBar::new(total as u64);
+        progress.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.cyan} [{bar:40.cyan/dark.grey}] {pos}/{len} frames loaded",
+            )
+            .unwrap()
+            .progress_chars("=> "),
+        );
+
+        for msg in frame_rx {
+            match msg {
+                ViewerMessage::Frame(frame) => {
+                    frames.push(frame);
+                    progress.set_position(frames.len() as u64);
+                }
+                ViewerMessage::Done => break,
+            }
+        }
+
+        progress.finish_and_clear();
+    }
+
+    let _ = loader_handle.join();
+
+    println!(
+        "Playing {} frames at ~{fps} fps (close window to exit)",
+        frames.len()
+    );
+
+    // Render loop — pure playback from precomputed data, no I/O.
     let mut window = Window::new_with_size("hermes — playback", 1024, 768);
     window.set_background_color(0.0, 0.0, 0.0);
     window.set_light(Light::StickToCamera);
     window.set_point_size(3.0);
 
+    let n_frames = frames.len();
     let frame_duration = std::time::Duration::from_millis(1000 / fps.max(1));
     let mut last_frame_time = std::time::Instant::now();
     let mut frame_index = 0_usize;
 
     while window.render() {
-        // Drain any newly loaded frames.
-        while let Ok(msg) = frame_rx.try_recv() {
-            match msg {
-                ViewerMessage::Frame(frame) => frames.push(frame),
-                ViewerMessage::Done => loading_done = true,
-            }
-        }
-
-        // Advance frame at controlled rate.
-        if !frames.is_empty() && last_frame_time.elapsed() >= frame_duration {
-            frame_index += 1;
-            if frame_index >= frames.len() {
-                if loading_done {
-                    frame_index = 0; // Loop.
-                } else {
-                    frame_index = frames.len() - 1; // Hold last while loading.
-                }
-            }
+        if last_frame_time.elapsed() >= frame_duration {
+            frame_index = (frame_index + 1) % n_frames;
             last_frame_time = std::time::Instant::now();
         }
 
-        // Draw current frame.
-        if let Some(frame) = frames.get(frame_index) {
-            for (pos, color) in frame.positions.iter().zip(frame.colors.iter()) {
-                let point = Point3::new(pos[0], pos[1], pos[2]);
-                let color_point = Point3::new(color[0], color[1], color[2]);
-                window.draw_point(&point, &color_point);
-            }
+        let frame = &frames[frame_index];
+        for (pos, color) in frame.positions.iter().zip(frame.colors.iter()) {
+            let point = Point3::new(pos[0], pos[1], pos[2]);
+            let color_point = Point3::new(color[0], color[1], color[2]);
+            window.draw_point(&point, &color_point);
         }
     }
-
-    let _ = loader_handle.join();
 
     Ok(())
 }
