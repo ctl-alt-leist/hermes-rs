@@ -1,8 +1,8 @@
 #![cfg(feature = "vis")]
 
-use hermes_rs::cosmology::planck_2018;
-use hermes_rs::grid::Grid;
-use hermes_rs::initial::zeldovich_init;
+use hermes_rs::physics::cosmology::planck_2018;
+use hermes_rs::physics::grid::Grid;
+use hermes_rs::physics::initial::zeldovich_init;
 use hermes_rs::vis::{colormap_hot, particle_density_colors};
 
 // ============================================================================

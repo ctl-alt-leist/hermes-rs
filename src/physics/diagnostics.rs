@@ -12,12 +12,12 @@
 
 use morphis::vector::Vector;
 
-use crate::cic::assign_density;
-use crate::cosmology::Cosmology;
-use crate::field::ScalarField;
-use crate::grid::Grid;
-use crate::particles::Particles;
-use crate::poisson::PoissonSolver;
+use crate::physics::cic::assign_density;
+use crate::physics::cosmology::Cosmology;
+use crate::physics::field::ScalarField;
+use crate::physics::grid::Grid;
+use crate::physics::particles::Particles;
+use crate::physics::poisson::PoissonSolver;
 
 /// Snapshot of diagnostic quantities at one point in time.
 #[derive(Debug, Clone)]
@@ -189,7 +189,7 @@ fn compute_potential_field(
     use ndrustfft::{FftHandler, R2cFftHandler, ndfft, ndfft_r2c, ndifft, ndifft_r2c};
     use num_complex::Complex64;
 
-    use crate::constants::G as GRAV;
+    use crate::physics::constants::G as GRAV;
 
     let n = overdensity.data.shape()[0];
     let n_complex = n / 2 + 1;

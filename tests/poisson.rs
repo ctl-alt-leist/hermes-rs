@@ -1,8 +1,8 @@
 use std::f64::consts::PI;
 
-use hermes_rs::field::ScalarField;
-use hermes_rs::grid::Grid;
-use hermes_rs::poisson::PoissonSolver;
+use hermes_rs::physics::field::ScalarField;
+use hermes_rs::physics::grid::Grid;
+use hermes_rs::physics::poisson::PoissonSolver;
 
 const DENSITY_MEAN: f64 = 1e-7; // M_☉ / kpc³
 const SCALE_FACTOR: f64 = 1.0;
@@ -68,7 +68,8 @@ fn single_mode_potential() {
     // Use the discrete k² for the expected amplitude.
     let kx_h_half = PI / n as f64;
     let k2_discrete = (2.0 / h) * (2.0 / h) * kx_h_half.sin().powi(2);
-    let prefactor = 4.0 * PI * hermes_rs::constants::G * DENSITY_MEAN * SCALE_FACTOR * SCALE_FACTOR;
+    let prefactor =
+        4.0 * PI * hermes_rs::physics::constants::G * DENSITY_MEAN * SCALE_FACTOR * SCALE_FACTOR;
     let expected_amplitude = prefactor * amplitude * k_fund / k2_discrete;
 
     // Check Fx at a few points.

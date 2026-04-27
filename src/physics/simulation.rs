@@ -6,14 +6,14 @@
 //! method advances through the time-step schedule.
 
 use crate::config::Configuration;
-use crate::cosmology::Cosmology;
-use crate::diagnostics::Diagnostics;
 use crate::error::HermesError;
-use crate::grid::Grid;
-use crate::initial::zeldovich_init;
-use crate::integrator::{midpoint, scale_factor_schedule, step_kdk};
-use crate::particles::Particles;
-use crate::poisson::PoissonSolver;
+use crate::physics::cosmology::Cosmology;
+use crate::physics::diagnostics::Diagnostics;
+use crate::physics::grid::Grid;
+use crate::physics::initial::zeldovich_init;
+use crate::physics::integrator::{midpoint, scale_factor_schedule, step_kdk};
+use crate::physics::particles::Particles;
+use crate::physics::poisson::PoissonSolver;
 
 /// Complete state of a particle-mesh cosmological simulation.
 pub struct Simulation {

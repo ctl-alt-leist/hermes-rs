@@ -1,7 +1,7 @@
 use hermes_rs::algebra::components_from_vector;
-use hermes_rs::cosmology::planck_2018;
-use hermes_rs::grid::Grid;
-use hermes_rs::initial::{power_spectrum, transfer_function, zeldovich_init};
+use hermes_rs::physics::cosmology::planck_2018;
+use hermes_rs::physics::grid::Grid;
+use hermes_rs::physics::initial::{power_spectrum, transfer_function, zeldovich_init};
 
 // ============================================================================
 // Transfer function

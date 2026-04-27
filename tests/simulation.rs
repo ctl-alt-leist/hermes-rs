@@ -1,5 +1,5 @@
 use hermes_rs::config::build_configuration;
-use hermes_rs::simulation::Simulation;
+use hermes_rs::physics::simulation::Simulation;
 
 /// Small configuration for fast tests: 8³ grid, 8³ particles, 5 steps.
 fn small_config() -> hermes_rs::config::Configuration {

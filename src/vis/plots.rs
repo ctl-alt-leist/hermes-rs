@@ -1,163 +1,18 @@
-//! Visualization tools for cosmological particle data.
-//!
-//! Feature-gated behind `vis`. Provides:
-//!
-//! - **3D particle viewer** via `kiss3d`: interactive dark-background window with
-//!   density-dependent hot colormap and orbit camera.
-//! - **2D projected density** via `plotters`: thin-slab projection rendered as a
-//!   heatmap image.
-//! - **Power spectrum** P(k) and **conservation time series** via `plotters`.
-//!
-//! All functions accept hermes types directly (Particles, ScalarField, etc.).
+//! 2D diagnostic plots via plotters.
 
 use std::path::Path;
 
-use crate::cic::assign_density;
-use crate::diagnostics::Diagnostics;
-use crate::grid::Grid;
-use crate::particles::Particles;
-
-// ============================================================================
-// Colormap
-// ============================================================================
-
-/// Map a normalized value in [0, 1] to an RGB color on a hot colormap.
-///
-/// The colormap runs: black → deep blue → cyan → white, designed
-/// for cosmological density fields on a dark background.
-pub fn colormap_hot(value: f64) -> [f32; 3] {
-    let t = value.clamp(0.0, 1.0) as f32;
-
-    let r = (3.0 * t - 1.0).clamp(0.0, 1.0);
-    let g = (3.0 * t - 2.0).clamp(0.0, 1.0);
-    let b = (2.0 * t)
-        .clamp(0.0, 1.0)
-        .min(1.0 - (3.0 * t - 2.5).clamp(0.0, 1.0));
-
-    [r, g, b]
-}
-
-/// Compute per-particle density estimates by CIC-depositing onto the grid
-/// and interpolating back. Returns a normalized [0, 1] density for each
-/// particle (log-scaled relative to the mean).
-pub fn particle_density_colors(particles: &Particles, grid: &Grid) -> Vec<[f32; 3]> {
-    let density = assign_density(particles, grid);
-    let density_mean = density.sum() / grid.total_cells() as f64;
-
-    let h = grid.cell_length;
-    let h_inv = 1.0 / h;
-    let n = grid.n_cells;
-
-    // Interpolate density back to particle positions (same CIC kernel).
-    let mut density_per_particle = vec![0.0_f64; particles.count()];
-
-    for (p, density_p) in density_per_particle.iter_mut().enumerate() {
-        let pos = particles.position_components(p);
-        let cell = [
-            pos[0] * h_inv - 0.5,
-            pos[1] * h_inv - 0.5,
-            pos[2] * h_inv - 0.5,
-        ];
-        let base = [
-            cell[0].floor() as isize,
-            cell[1].floor() as isize,
-            cell[2].floor() as isize,
-        ];
-        let frac = [
-            cell[0] - base[0] as f64,
-            cell[1] - base[1] as f64,
-            cell[2] - base[2] as f64,
-        ];
-        let weight = [
-            [1.0 - frac[0], frac[0]],
-            [1.0 - frac[1], frac[1]],
-            [1.0 - frac[2], frac[2]],
-        ];
-
-        let mut rho = 0.0;
-        for (a, &weight_a) in weight[0].iter().enumerate() {
-            let g0 = ((base[0] + a as isize) % n as isize + n as isize) as usize % n;
-            for (b, &weight_b) in weight[1].iter().enumerate() {
-                let g1 = ((base[1] + b as isize) % n as isize + n as isize) as usize % n;
-                for (c, &weight_c) in weight[2].iter().enumerate() {
-                    let g2 = ((base[2] + c as isize) % n as isize + n as isize) as usize % n;
-                    rho += density.data[[g0, g1, g2]] * weight_a * weight_b * weight_c;
-                }
-            }
-        }
-
-        *density_p = rho;
-    }
-
-    // Log-scale and normalize to [0, 1].
-    let log_min = (density_mean * 0.1).ln();
-    let log_max = density_per_particle
-        .iter()
-        .copied()
-        .fold(0.0_f64, f64::max)
-        .max(density_mean)
-        .ln();
-    let log_range = (log_max - log_min).max(1e-10);
-
-    density_per_particle
-        .iter()
-        .map(|&rho| {
-            let log_rho = rho.max(1e-30).ln();
-            let normalized = ((log_rho - log_min) / log_range).clamp(0.0, 1.0);
-
-            colormap_hot(normalized)
-        })
-        .collect()
-}
-
-// ============================================================================
-// 3D interactive viewer (kiss3d)
-// ============================================================================
-
-/// Open an interactive 3D window showing the particle distribution.
-///
-/// Particles are rendered as colored points on a dark background.
-/// Color encodes local density on a hot colormap (log-scaled).
-/// The camera orbits freely with mouse controls.
-#[cfg(feature = "vis")]
-pub fn render_particles_3d(particles: &Particles, grid: &Grid) {
-    use kiss3d::light::Light;
-    use kiss3d::nalgebra::Point3;
-    use kiss3d::window::Window;
-
-    let mut window = Window::new_with_size("hermes — particle viewer", 1200, 900);
-    window.set_background_color(0.0, 0.0, 0.0);
-    window.set_light(Light::StickToCamera);
-    window.set_point_size(2.0);
-
-    let colors = particle_density_colors(particles, grid);
-
-    // Normalize positions to [-0.5, 0.5] for display.
-    let scale = 1.0 / grid.box_length as f32;
-
-    while window.render() {
-        for (p, color) in colors.iter().enumerate() {
-            let pos = particles.position_components(p);
-            let point = Point3::new(
-                pos[0] as f32 * scale - 0.5,
-                pos[1] as f32 * scale - 0.5,
-                pos[2] as f32 * scale - 0.5,
-            );
-            window.draw_point(&point, &Point3::new(color[0], color[1], color[2]));
-        }
-    }
-}
-
-// ============================================================================
-// 2D projected density slice (plotters)
-// ============================================================================
+use crate::physics::cic::assign_density;
+use crate::physics::diagnostics::Diagnostics;
+use crate::physics::grid::Grid;
+use crate::physics::particles::Particles;
+use crate::vis::colormap::colormap_hot;
 
 /// Render a 2D projected density slice as a PNG image.
 ///
 /// Projects a thin slab of thickness `slab_thickness` (in kpc) centered
 /// at `slab_center` along the z-axis. The projection sums particle masses
 /// in the slab and deposits onto a 2D histogram.
-#[cfg(feature = "vis")]
 pub fn render_density_slice(
     particles: &Particles,
     grid: &Grid,
@@ -171,14 +26,12 @@ pub fn render_density_slice(
     let half_slab = slab_thickness / 2.0;
     let bin_size = grid.box_length / resolution as f64;
 
-    // Deposit particles in the slab onto a 2D histogram.
     let mut histogram = vec![vec![0.0_f64; resolution]; resolution];
 
     for p in 0..particles.count() {
         let pos = particles.position_components(p);
         let z = pos[2];
 
-        // Check if particle is in the slab (with periodic wrapping).
         let dz = (z - slab_center)
             .abs()
             .min(grid.box_length - (z - slab_center).abs());
@@ -191,7 +44,6 @@ pub fn render_density_slice(
         histogram[bin_x][bin_y] += particles.mass_particle;
     }
 
-    // Find range for color mapping.
     let max_density = histogram
         .iter()
         .flat_map(|row| row.iter())
@@ -208,7 +60,6 @@ pub fn render_density_slice(
     let log_max = max_density.max(1e-30).ln();
     let log_range = (log_max - log_min).max(1e-10);
 
-    // Render to PNG.
     let root =
         BitMapBackend::new(output_path, (resolution as u32, resolution as u32)).into_drawing_area();
     root.fill(&BLACK)?;
@@ -234,15 +85,7 @@ pub fn render_density_slice(
     Ok(())
 }
 
-// ============================================================================
-// Power spectrum plot (plotters)
-// ============================================================================
-
 /// Compute and plot the matter power spectrum P(k).
-///
-/// Deposits particles onto the grid, FFTs the overdensity, bins the
-/// power in spherical shells, and plots P(k) vs k.
-#[cfg(feature = "vis")]
 pub fn plot_power_spectrum(
     particles: &Particles,
     grid: &Grid,
@@ -259,12 +102,10 @@ pub fn plot_power_spectrum(
     let n = grid.n_cells;
     let n_complex = n / 2 + 1;
 
-    // Compute overdensity.
     let mut overdensity = density;
     overdensity.data /= density_mean;
     overdensity.data -= 1.0;
 
-    // Forward FFT.
     let mut overdensity_hat = ndarray::Array3::<Complex64>::zeros((n, n, n_complex));
     let handler_r2c = R2cFftHandler::new(n);
     let handler_c2c_1 = FftHandler::new(n);
@@ -277,7 +118,6 @@ pub fn plot_power_spectrum(
     ndfft(&overdensity_hat, &mut scratch, &handler_c2c_0, 0);
     overdensity_hat.assign(&scratch);
 
-    // Bin power in spherical k-shells.
     let k_nyquist = PI * n as f64 / grid.box_length;
     let n_bins = n / 2;
     let dk = k_nyquist / n_bins as f64;
@@ -307,7 +147,6 @@ pub fn plot_power_spectrum(
         }
     }
 
-    // P(k) = V_box / N_modes × |δ̂|²
     let volume_box = grid.box_volume();
     let k_values: Vec<f64> = (0..n_bins).map(|b| (b as f64 + 0.5) * dk).collect();
     let power_values: Vec<f64> = (0..n_bins)
@@ -320,7 +159,6 @@ pub fn plot_power_spectrum(
         })
         .collect();
 
-    // Filter out zero bins for log-scale plotting.
     let points: Vec<(f64, f64)> = k_values
         .iter()
         .zip(power_values.iter())
@@ -337,7 +175,6 @@ pub fn plot_power_spectrum(
     let power_min = points.iter().map(|(_, p)| *p).fold(f64::MAX, f64::min);
     let power_max = points.iter().map(|(_, p)| *p).fold(0.0_f64, f64::max);
 
-    // Plot.
     let root = BitMapBackend::new(output_path, (800, 600)).into_drawing_area();
     root.fill(&BLACK)?;
 
@@ -371,15 +208,7 @@ pub fn plot_power_spectrum(
     Ok(())
 }
 
-// ============================================================================
-// Conservation time series (plotters)
-// ============================================================================
-
 /// Plot conservation diagnostics over the simulation history.
-///
-/// Creates a multi-panel plot with: total momentum magnitude, kinetic energy,
-/// potential energy, and total energy as functions of scale factor.
-#[cfg(feature = "vis")]
 pub fn plot_conservation(
     diagnostics: &[Diagnostics],
     output_path: &Path,

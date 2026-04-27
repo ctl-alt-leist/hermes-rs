@@ -13,7 +13,7 @@ use morphis::vector::Vector;
 use ndarray::Array3;
 
 use crate::algebra::{euclidean_3, scalar_from_f64, vector_from_components};
-use crate::grid::Grid;
+use crate::physics::grid::Grid;
 
 // ============================================================================
 // ScalarField — grade-0 field
