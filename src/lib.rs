@@ -1,3 +1,4 @@
+pub mod cic;
 pub mod config;
 pub mod constants;
 pub mod cosmology;
