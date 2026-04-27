@@ -312,7 +312,6 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
     use crate::colormap::colormap_hot;
     use crate::io::snapshot::load_snapshot;
 
-    // Load snapshots.
     let mut snapshots = Vec::new();
     let mut step = 0_usize;
     loop {
