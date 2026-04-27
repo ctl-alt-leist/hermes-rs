@@ -7,6 +7,7 @@ edition = "2024"
 bincode = "1"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
+indicatif = "0.17"
 morphis = { git = "https://github.com/ctl-alt-leist/morphis-rs.git" }
 ndarray = "0.16"
 ndrustfft = "0.5"

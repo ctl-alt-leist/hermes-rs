@@ -66,30 +66,50 @@ pub fn run(cli: &Cli) -> Result<(), HermesError> {
         observers.push(Box::new(FileObserver::new(dir)));
     }
 
-    if !cli.quiet {
-        println!("Running simulation...");
-    }
-
+    let total_steps = config.time.n_steps;
     let run_start = Instant::now();
-    let n_steps = sim.run(&mut observers)?;
-    let run_time = run_start.elapsed();
 
     if !cli.quiet {
+        use indicatif::{ProgressBar, ProgressStyle};
+
+        let progress_bar = ProgressBar::new(total_steps as u64);
+        progress_bar.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.cyan} [{elapsed_precise}] [{bar:40.cyan/dark.grey}] step {pos}/{len} z={msg} ({eta} remaining)"
+            )
+            .unwrap()
+            .progress_chars("=> "),
+        );
+
+        let n_steps = sim.run_with_progress(&mut observers, |step, scale_factor| {
+            let redshift = 1.0 / scale_factor - 1.0;
+            progress_bar.set_position(step as u64);
+            progress_bar.set_message(format!("{redshift:.1}"));
+        })?;
+
+        let run_time = run_start.elapsed();
+        progress_bar.finish_and_clear();
         println!(
             "Completed {n_steps} steps in {:.2}s ({:.1} ms/step)",
             run_time.as_secs_f64(),
             run_time.as_secs_f64() * 1000.0 / n_steps as f64,
         );
+    } else {
+        let n_steps = sim.run(&mut observers)?;
+        let run_time = run_start.elapsed();
+        let _ = (n_steps, run_time);
+    }
 
-        if let Some(diag) = sim.latest_diagnostics() {
-            println!();
-            println!("Final state (z = {:.1}):", 1.0 / sim.scale_factor - 1.0);
-            println!("  Mass:     {:.4e} M_☉", diag.mass_total);
-            println!("  |P|:      {:.4e}", diag.momentum_magnitude());
-            println!("  E_kin:    {:.4e}", diag.energy_kinetic);
-            println!("  E_pot:    {:.4e}", diag.energy_potential);
-            println!("  |L|:      {:.4e}", diag.angular_momentum_magnitude());
-        }
+    if !cli.quiet
+        && let Some(diag) = sim.latest_diagnostics()
+    {
+        println!();
+        println!("Final state (z = {:.1}):", 1.0 / sim.scale_factor - 1.0);
+        println!("  Mass:     {:.4e} M_☉", diag.mass_total);
+        println!("  |P|:      {:.4e}", diag.momentum_magnitude());
+        println!("  E_kin:    {:.4e}", diag.energy_kinetic);
+        println!("  E_pot:    {:.4e}", diag.energy_potential);
+        println!("  |L|:      {:.4e}", diag.angular_momentum_magnitude());
     }
 
     Ok(())

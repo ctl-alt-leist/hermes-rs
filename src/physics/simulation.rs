@@ -75,7 +75,19 @@ impl Simulation {
     /// at each snapshot interval. Multiple observers can run simultaneously —
     /// e.g. a `FileObserver` writing to disk and a `MemoryObserver` collecting
     /// in memory.
+    /// Run the simulation without a progress callback.
     pub fn run(&mut self, observers: &mut [Box<dyn Observer>]) -> Result<usize, HermesError> {
+        self.run_with_progress(observers, |_, _| {})
+    }
+
+    /// Run the full simulation with a per-step progress callback.
+    ///
+    /// The callback receives `(step, scale_factor)` after each step.
+    pub fn run_with_progress(
+        &mut self,
+        observers: &mut [Box<dyn Observer>],
+        on_step: impl Fn(usize, f64),
+    ) -> Result<usize, HermesError> {
         let schedule = scale_factor_schedule(
             self.config.time.scale_factor_initial,
             self.config.time.scale_factor_final,
@@ -111,6 +123,8 @@ impl Simulation {
             self.step = n + 1;
             self.scale_factor = scale_factor_next;
             forces_prev = Some(forces);
+
+            on_step(self.step, self.scale_factor);
 
             // Lightweight snapshot for observers every step.
             if has_observers {
