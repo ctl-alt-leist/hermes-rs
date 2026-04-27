@@ -57,7 +57,7 @@ fn main() {
     // Run.
     println!("Running simulation...");
     let run_start = Instant::now();
-    let n_steps = sim.run().expect("simulation failed");
+    let n_steps = sim.run(&mut []).expect("simulation failed");
     let run_time = run_start.elapsed();
 
     println!(

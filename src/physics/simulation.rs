@@ -3,10 +3,13 @@
 //! The `Simulation` struct owns all state needed for a complete PM run:
 //! particles, solver, grid, cosmology, and the diagnostics history.
 //! Construction from a `Configuration` initializes everything; the `run`
-//! method advances through the time-step schedule.
+//! method advances through the time-step schedule and notifies observers
+//! at snapshot intervals.
 
 use crate::config::Configuration;
 use crate::error::HermesError;
+use crate::io::observer::Observer;
+use crate::io::snapshot::Snapshot;
 use crate::physics::cosmology::Cosmology;
 use crate::physics::diagnostics::Diagnostics;
 use crate::physics::grid::Grid;
@@ -66,16 +69,32 @@ impl Simulation {
         })
     }
 
-    /// Run the full simulation from initial to final scale factor.
+    /// Run the full simulation, notifying observers at snapshot intervals.
     ///
-    /// Returns the number of steps completed.
-    pub fn run(&mut self) -> Result<usize, HermesError> {
+    /// Observers receive a `Snapshot` (morphis-native positions and momenta)
+    /// at each snapshot interval. Multiple observers can run simultaneously —
+    /// e.g. a `FileObserver` writing to disk and a `MemoryObserver` collecting
+    /// in memory.
+    pub fn run(&mut self, observers: &mut [Box<dyn Observer>]) -> Result<usize, HermesError> {
         let schedule = scale_factor_schedule(
             self.config.time.scale_factor_initial,
             self.config.time.scale_factor_final,
             self.config.time.n_steps,
             &self.config.time.stepping,
         );
+
+        // Notify observers with initial snapshot.
+        let initial_snapshot = Snapshot::capture(
+            &self.particles,
+            &self.grid,
+            &self.cosmology,
+            &mut self.solver,
+            0,
+            self.scale_factor,
+        );
+        for observer in observers.iter_mut() {
+            observer.on_snapshot(&initial_snapshot);
+        }
 
         let mut forces_prev = None;
 
@@ -99,7 +118,7 @@ impl Simulation {
             self.scale_factor = scale_factor_next;
             forces_prev = Some(forces);
 
-            // Record diagnostics at snapshot intervals.
+            // Record diagnostics and notify observers at snapshot intervals.
             if self
                 .step
                 .is_multiple_of(self.config.output.snapshot_interval)
@@ -113,7 +132,23 @@ impl Simulation {
                     self.scale_factor,
                 );
                 self.diagnostics_history.push(diagnostics);
+
+                let snapshot = Snapshot::capture(
+                    &self.particles,
+                    &self.grid,
+                    &self.cosmology,
+                    &mut self.solver,
+                    self.step,
+                    self.scale_factor,
+                );
+                for observer in observers.iter_mut() {
+                    observer.on_snapshot(&snapshot);
+                }
             }
+        }
+
+        for observer in observers.iter_mut() {
+            observer.on_complete();
         }
 
         Ok(self.step)
