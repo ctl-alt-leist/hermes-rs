@@ -6,5 +6,6 @@ pub mod cosmology;
 pub mod error;
 pub mod field;
 pub mod grid;
+pub mod initial;
 pub mod particles;
 pub mod poisson;

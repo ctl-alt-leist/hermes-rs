@@ -171,6 +171,8 @@ dependencies = [
  "ndrustfft",
  "num-complex",
  "proptest",
+ "rand",
+ "rand_chacha",
  "serde",
  "thiserror",
  "toml",
