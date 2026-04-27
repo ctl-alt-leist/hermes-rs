@@ -1221,6 +1221,7 @@ dependencies = [
  "proptest",
  "rand",
  "rand_chacha",
+ "rayon",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",

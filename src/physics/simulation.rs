@@ -160,6 +160,86 @@ impl Simulation {
         Ok(self.step)
     }
 
+    /// Run the simulation, sending snapshots into a pipeline channel.
+    ///
+    /// The simulation sends `Arc<Snapshot>` through the `SnapshotSender`;
+    /// downstream consumers (disk writer, viewer) receive them via the
+    /// router. The simulation never blocks on consumers.
+    pub fn run_into_pipeline(
+        &mut self,
+        sender: &crate::run::pipeline::SnapshotSender,
+        on_step: impl Fn(usize, f64),
+    ) -> Result<usize, HermesError> {
+        let schedule = scale_factor_schedule(
+            self.config.time.scale_factor_initial,
+            self.config.time.scale_factor_final,
+            self.config.time.n_steps,
+            &self.config.time.stepping,
+        );
+
+        // Send initial snapshot.
+        let initial = std::sync::Arc::new(Snapshot::capture_lightweight(
+            &self.particles,
+            0,
+            self.scale_factor,
+        ));
+        sender.send(initial);
+
+        let mut forces_prev = None;
+
+        for n in 0..self.config.time.n_steps {
+            let scale_factor_prev = schedule[n];
+            let scale_factor_next = schedule[n + 1];
+            let scale_factor_mid = midpoint(scale_factor_prev, scale_factor_next);
+
+            let forces = step_kdk(
+                &mut self.particles,
+                &mut self.solver,
+                &self.grid,
+                &self.cosmology,
+                scale_factor_prev,
+                scale_factor_mid,
+                scale_factor_next,
+                forces_prev.as_ref(),
+            )?;
+
+            self.step = n + 1;
+            self.scale_factor = scale_factor_next;
+            forces_prev = Some(forces);
+
+            on_step(self.step, self.scale_factor);
+
+            // Lightweight snapshot wrapped in Arc for zero-copy fan-out.
+            let snapshot = std::sync::Arc::new(Snapshot::capture_lightweight(
+                &self.particles,
+                self.step,
+                self.scale_factor,
+            ));
+            sender.send(snapshot);
+
+            // Full diagnostics at wider interval (stays on sim thread).
+            let is_diagnostic_step = self
+                .step
+                .is_multiple_of(self.config.output.snapshot_interval)
+                || self.step == self.config.time.n_steps;
+
+            if is_diagnostic_step {
+                let diagnostics = Diagnostics::compute(
+                    &self.particles,
+                    &self.grid,
+                    &self.cosmology,
+                    &mut self.solver,
+                    self.scale_factor,
+                );
+                self.diagnostics_history.push(diagnostics);
+            }
+        }
+
+        sender.done();
+
+        Ok(self.step)
+    }
+
     /// Latest recorded diagnostics.
     pub fn latest_diagnostics(&self) -> Option<&Diagnostics> {
         self.diagnostics_history.last()
