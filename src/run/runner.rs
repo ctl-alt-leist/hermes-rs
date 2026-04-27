@@ -183,8 +183,12 @@ fn print_header(config: &Configuration, cli: &Cli) {
     println!();
 }
 
-/// Play back saved snapshots.
+/// Play back saved snapshots (interactive viewer or record to GIF).
 fn run_playback(dir: &str, cli: &Cli) -> Result<(), HermesError> {
+    // Recording mode: render to GIF without a window.
+    if let Some(ref output_path) = cli.record {
+        return record_to_gif(dir, output_path, cli);
+    }
     #[cfg(not(feature = "vis"))]
     {
         let _ = (dir, cli);
@@ -199,8 +203,8 @@ fn run_playback(dir: &str, cli: &Cli) -> Result<(), HermesError> {
         use kiss3d::nalgebra::Point3;
         use kiss3d::window::Window;
 
+        use crate::colormap::colormap_hot;
         use crate::io::snapshot::load_snapshot;
-        use crate::vis::colormap::colormap_hot;
 
         // Load all snapshots.
         let mut snapshots = Vec::new();
@@ -272,7 +276,7 @@ fn run_playback(dir: &str, cli: &Cli) -> Result<(), HermesError> {
             .collect();
 
         if !cli.quiet {
-            println!("Playing at ~15 fps (close window to exit)");
+            println!("Playing at ~{} fps (close window to exit)", cli.fps);
         }
 
         let mut window = Window::new_with_size("hermes — playback", 1024, 768);
@@ -282,7 +286,7 @@ fn run_playback(dir: &str, cli: &Cli) -> Result<(), HermesError> {
 
         let n_frames = frames.len();
         let mut frame_index = 0_usize;
-        let frame_duration = std::time::Duration::from_millis(67);
+        let frame_duration = std::time::Duration::from_millis(1000 / cli.fps.max(1));
         let mut last_frame_time = std::time::Instant::now();
 
         while window.render() {
@@ -301,4 +305,139 @@ fn run_playback(dir: &str, cli: &Cli) -> Result<(), HermesError> {
 
         Ok(())
     }
+}
+
+/// Record snapshots to a GIF file via software rasterization.
+fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesError> {
+    use crate::colormap::colormap_hot;
+    use crate::io::snapshot::load_snapshot;
+
+    // Load snapshots.
+    let mut snapshots = Vec::new();
+    let mut step = 0_usize;
+    loop {
+        let path = format!("{dir}/snapshot_{step:05}.bin");
+        match load_snapshot(std::path::Path::new(&path)) {
+            Ok(snapshot) => {
+                snapshots.push(snapshot);
+                step += 1;
+            }
+            Err(_) => break,
+        }
+    }
+
+    if snapshots.is_empty() {
+        return Err(HermesError::Config(format!("no snapshots found in {dir}/")));
+    }
+
+    if !cli.quiet {
+        println!("Recording {} frames to {output_path}...", snapshots.len());
+    }
+
+    let width = 512_u32;
+    let height = 512_u32;
+    let point_radius = 1_i32;
+
+    // Estimate box length.
+    let box_length = snapshots[0]
+        .positions
+        .iter()
+        .flat_map(|pos| (0..3).map(move |d| pos.component(&[d]).abs()))
+        .fold(0.0_f64, f64::max)
+        * 1.1;
+    let scale = 1.0 / box_length;
+
+    // Create GIF encoder.
+    let output_file = std::fs::File::create(output_path)
+        .map_err(|e| HermesError::Config(format!("failed to create {output_path}: {e}")))?;
+    let mut encoder = image::codecs::gif::GifEncoder::new(output_file);
+    let frame_delay = image::Delay::from_saturating_duration(std::time::Duration::from_millis(
+        1000 / cli.fps.max(1),
+    ));
+
+    use indicatif::{ProgressBar, ProgressStyle};
+    let progress = if !cli.quiet {
+        let progress_bar = ProgressBar::new(snapshots.len() as u64);
+        progress_bar.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.cyan} [{bar:40.cyan/dark.grey}] {pos}/{len} frames",
+            )
+            .unwrap()
+            .progress_chars("=> "),
+        );
+        Some(progress_bar)
+    } else {
+        None
+    };
+
+    for snapshot in &snapshots {
+        // Compute velocity colors.
+        let speeds: Vec<f64> = snapshot.momenta.iter().map(|mom| mom.norm()).collect();
+        let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
+        let speed_min = speeds.iter().copied().fold(f64::MAX, f64::min);
+        let speed_range = (speed_max - speed_min).max(1e-30);
+
+        // Rasterize: project onto XY plane (simple orthographic).
+        // Start with opaque black background.
+        let mut pixels = vec![0_u8; (width * height * 4) as usize];
+        for pixel in pixels.chunks_exact_mut(4) {
+            pixel[3] = 255;
+        }
+
+        for (pos, &speed) in snapshot.positions.iter().zip(speeds.iter()) {
+            // Map positions from [0, box_length] to [0, 1].
+            let x_norm = pos.component(&[0]) * scale;
+            let y_norm = pos.component(&[1]) * scale;
+
+            let pixel_x = (x_norm * width as f64) as i32;
+            let pixel_y = (y_norm * height as f64) as i32;
+
+            let normalized = ((speed - speed_min) / speed_range).clamp(0.0, 1.0);
+            let color = colormap_hot(normalized);
+            let r = (color[0] * 255.0) as u8;
+            let g = (color[1] * 255.0) as u8;
+            let b = (color[2] * 255.0) as u8;
+
+            // Draw a small filled square for each particle.
+            for dy in -point_radius..=point_radius {
+                for dx in -point_radius..=point_radius {
+                    let px = pixel_x + dx;
+                    let py = pixel_y + dy;
+                    if px >= 0 && px < width as i32 && py >= 0 && py < height as i32 {
+                        let offset = ((py as u32 * width + px as u32) * 4) as usize;
+                        // Additive blending: brighten overlapping particles.
+                        pixels[offset] = pixels[offset].saturating_add(r);
+                        pixels[offset + 1] = pixels[offset + 1].saturating_add(g);
+                        pixels[offset + 2] = pixels[offset + 2].saturating_add(b);
+                        pixels[offset + 3] = 255;
+                    }
+                }
+            }
+        }
+
+        let frame = image::Frame::from_parts(
+            image::RgbaImage::from_raw(width, height, pixels).unwrap(),
+            0,
+            0,
+            frame_delay,
+        );
+
+        encoder
+            .encode_frame(frame)
+            .map_err(|e| HermesError::Config(format!("GIF encode failed: {e}")))?;
+
+        if let Some(ref progress_bar) = progress {
+            progress_bar.inc(1);
+        }
+    }
+
+    if let Some(progress_bar) = progress {
+        progress_bar.finish_and_clear();
+    }
+
+    if !cli.quiet {
+        println!("Saved {output_path} ({} frames)", snapshots.len());
+    }
+
+    Ok(())
 }

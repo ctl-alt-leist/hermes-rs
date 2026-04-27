@@ -29,6 +29,14 @@ pub struct Cli {
     #[arg(long)]
     pub playback: Option<String>,
 
+    /// Save playback as GIF (e.g. --record output.gif). Use with --playback.
+    #[arg(long)]
+    pub record: Option<String>,
+
+    /// Playback framerate in fps (default: 15).
+    #[arg(long, default_value = "15")]
+    pub fps: u64,
+
     /// RNG seed.
     #[arg(long, default_value = "42")]
     pub seed: u64,

@@ -1,4 +1,5 @@
 pub mod algebra;
+pub mod colormap;
 pub mod config;
 pub mod error;
 pub mod io;

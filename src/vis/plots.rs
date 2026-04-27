@@ -2,11 +2,11 @@
 
 use std::path::Path;
 
+use crate::colormap::colormap_hot;
 use crate::physics::cic::assign_density;
 use crate::physics::diagnostics::Diagnostics;
 use crate::physics::grid::Grid;
 use crate::physics::particles::Particles;
-use crate::vis::colormap::colormap_hot;
 
 /// Render a 2D projected density slice as a PNG image.
 ///

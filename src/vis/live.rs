@@ -16,11 +16,11 @@ use kiss3d::light::Light;
 use kiss3d::nalgebra::Point3;
 use kiss3d::window::Window;
 
+use crate::colormap::colormap_hot;
 use crate::config::Configuration;
 use crate::io::observer::{FileObserver, Observer};
 use crate::io::snapshot::Snapshot;
 use crate::physics::simulation::Simulation;
-use crate::vis::colormap::colormap_hot;
 
 /// Precomputed display data — everything the renderer needs, no morphis.
 struct DisplayFrame {

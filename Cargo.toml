@@ -7,6 +7,7 @@ edition = "2024"
 bincode = "1"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
+image = "0.25"
 indicatif = "0.17"
 morphis = { git = "https://github.com/ctl-alt-leist/morphis-rs.git" }
 ndarray = "0.16"
@@ -19,7 +20,7 @@ thiserror = "2"
 toml = "0.8"
 
 [features]
-vis = ["dep:kiss3d", "dep:plotters", "dep:image"]
+vis = ["dep:kiss3d", "dep:plotters"]
 
 [dependencies.kiss3d]
 version = "0.35"
@@ -27,10 +28,6 @@ optional = true
 
 [dependencies.plotters]
 version = "0.3"
-optional = true
-
-[dependencies.image]
-version = "0.25"
 optional = true
 
 [[example]]
