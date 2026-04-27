@@ -26,7 +26,7 @@ pub trait Observer: Send {
 
 /// Observer that writes snapshots to disk as bincode files.
 ///
-/// Files are written to `{directory}/snapshot_{step:05}.bin`.
+/// Files are written to `{directory}/snapshot-{step:05}.bin`.
 /// The directory is created automatically if it doesn't exist.
 pub struct FileObserver {
     directory: PathBuf,
@@ -50,7 +50,7 @@ impl FileObserver {
 
 impl Observer for FileObserver {
     fn on_snapshot(&mut self, snapshot: &Snapshot) {
-        let filename = format!("snapshot_{:05}.bin", snapshot.step);
+        let filename = format!("snapshot-{:05}.bin", snapshot.step);
         let path = self.directory.join(filename);
 
         match save_snapshot(snapshot, &path) {

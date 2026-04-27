@@ -29,12 +29,12 @@ pub trait Scene {
 /// Look up a scene by name.
 pub fn scene_by_name(name: &str) -> Result<Box<dyn Scene>, HermesError> {
     match name {
-        "cosmic_web" => Ok(Box::new(CosmicWeb)),
+        "cosmic-web" => Ok(Box::new(CosmicWeb)),
         _ => Err(HermesError::Config(format!("unknown scene: {name}"))),
     }
 }
 
 /// List available scene names.
 pub fn available_scenes() -> Vec<&'static str> {
-    vec!["cosmic_web"]
+    vec!["cosmic-web"]
 }

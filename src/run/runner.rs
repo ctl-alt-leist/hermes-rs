@@ -210,7 +210,7 @@ fn run_playback(dir: &str, cli: &Cli) -> Result<(), HermesError> {
         let mut snapshots = Vec::new();
         let mut step = 0_usize;
         loop {
-            let path = format!("{dir}/snapshot_{step:05}.bin");
+            let path = format!("{dir}/snapshot-{step:05}.bin");
             match load_snapshot(std::path::Path::new(&path)) {
                 Ok(snapshot) => {
                     snapshots.push(snapshot);
@@ -316,7 +316,7 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
     let mut snapshots = Vec::new();
     let mut step = 0_usize;
     loop {
-        let path = format!("{dir}/snapshot_{step:05}.bin");
+        let path = format!("{dir}/snapshot-{step:05}.bin");
         match load_snapshot(std::path::Path::new(&path)) {
             Ok(snapshot) => {
                 snapshots.push(snapshot);

@@ -157,7 +157,7 @@ fn file_observer_writes_files() {
     observer.on_complete();
 
     assert_eq!(observer.n_saved(), 1);
-    assert!(dir.join("snapshot_00000.bin").exists());
+    assert!(dir.join("snapshot-00000.bin").exists());
 
     // Clean up.
     std::fs::remove_dir_all(dir).ok();
@@ -172,7 +172,7 @@ fn file_observer_files_are_loadable() {
     observer.on_snapshot(&snapshot);
     observer.on_complete();
 
-    let loaded = load_snapshot(&dir.join("snapshot_00000.bin")).expect("load failed");
+    let loaded = load_snapshot(&dir.join("snapshot-00000.bin")).expect("load failed");
     assert_eq!(loaded.particle_count(), snapshot.particle_count());
 
     // Clean up.

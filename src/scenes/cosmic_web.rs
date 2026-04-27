@@ -15,7 +15,7 @@ pub struct CosmicWeb;
 
 impl Scene for CosmicWeb {
     fn name(&self) -> &str {
-        "cosmic_web"
+        "cosmic-web"
     }
 
     fn initialize(&self, config: &Configuration, seed: u64) -> Result<Simulation, HermesError> {
