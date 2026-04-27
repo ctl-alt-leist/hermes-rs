@@ -80,6 +80,16 @@ impl PoissonSolver {
         }
     }
 
+    /// Reference to the grid geometry.
+    pub fn grid_ref(&self) -> &Grid {
+        &self.grid
+    }
+
+    /// Reference to the precomputed Green's function.
+    pub fn green_function(&self) -> &Array3<f64> {
+        &self.green
+    }
+
     /// Solve for the gravitational force field from an overdensity.
     ///
     /// Given the overdensity δ = ρ/ρ̄ - 1 on the grid, returns the
