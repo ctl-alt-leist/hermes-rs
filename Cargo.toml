@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 bincode = "1"
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
 morphis = { git = "https://github.com/ctl-alt-leist/morphis-rs.git" }
 ndarray = "0.16"
 ndrustfft = "0.5"
@@ -31,15 +33,10 @@ version = "0.25"
 optional = true
 
 [[example]]
-name = "cosmic_web"
-required-features = ["vis"]
+name = "benchmark"
 
 [[example]]
 name = "profile_viewer"
-required-features = ["vis"]
-
-[[example]]
-name = "playback"
 required-features = ["vis"]
 
 [dev-dependencies]
