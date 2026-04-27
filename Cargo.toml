@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 morphis = { git = "https://github.com/ctl-alt-leist/morphis-rs.git" }
 ndarray = "0.16"
+ndrustfft = "0.5"
+num-complex = "0.4"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 toml = "0.8"
