@@ -115,6 +115,13 @@ pub fn build_configuration(
 // ============================================================================
 
 /// Recursively merge `source` into `base`, overwriting leaf values.
+///
+/// Public for use by the runner's four-tier config merge.
+pub fn deep_merge_public(base: &mut toml::Value, source: &toml::Value) {
+    deep_merge(base, source);
+}
+
+/// Recursively merge `source` into `base`, overwriting leaf values.
 fn deep_merge(base: &mut toml::Value, source: &toml::Value) {
     if let (toml::Value::Table(base_table), toml::Value::Table(source_table)) = (base, source) {
         for (key, source_val) in source_table {

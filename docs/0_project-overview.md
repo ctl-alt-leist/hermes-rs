@@ -22,10 +22,11 @@ with the closure $C^{(0)} = 0$, sources $S^{(0)} = 0$, and the gravitational gen
 | Particle storage (SoA) | `physics::particles` | Complete |
 | Cloud-in-cell mass assignment | `physics::cic` | Complete |
 | FFT Poisson solver | `physics::poisson` | Complete |
-| Zel'dovich initialization | `physics::initial` | Complete |
 | Symplectic KDK leapfrog | `physics::integrator` | Complete |
 | Conservation diagnostics | `physics::diagnostics` | Complete |
 | Simulation driver | `physics::simulation` | Complete |
+| Cosmic web scene | `scenes::cosmic_web` | Complete |
+| Galaxy group scene | `scenes::galaxy_group` | Complete |
 | Pipeline threading | `run::pipeline` | Complete |
 | Snapshot I/O (bincode) | `io::snapshot` | Complete |
 | Observer pattern | `io::observer` | Complete |
@@ -60,10 +61,9 @@ src/
     particles.rs      SoA particle storage with morphis interface
     cic.rs            cloud-in-cell mass assignment + force interpolation
     poisson.rs        FFT Poisson solver (ndrustfft)
-    initial.rs        Zel'dovich ICs from Eisenstein-Hu power spectrum
     integrator.rs     symplectic KDK leapfrog
     diagnostics.rs    conservation audits (mass, momentum, energy, L bivector)
-    simulation.rs     simulation driver
+    simulation.rs     simulation driver (from_scene + from_config)
   io/
     snapshot.rs       Snapshot type, bincode serialization
     observer.rs       Observer trait, FileObserver, MemoryObserver
@@ -71,8 +71,9 @@ src/
     cli.rs            clap-based CLI
     runner.rs         mode routing (headless, live, playback, record)
     pipeline.rs       threaded pipeline: router, disk writer, precompute, viewer
-  scenes/
-    cosmic_web.rs     Zel'dovich PM in a periodic box (default scene)
+  scenes/                each a subdirectory with init.rs + defaults.toml
+    cosmic_web/       Zel'dovich PM in a 100 Mpc periodic box (default)
+    galaxy_group/     3 colliding NFW halos in an 8 Mpc box
   vis/                (#[cfg(feature = "vis")])
     viewer.rs         static 3D particle viewer (kiss3d)
     plots.rs          density slices, P(k), conservation plots (plotters)

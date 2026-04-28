@@ -41,10 +41,9 @@ src/
     particles.rs      SoA particle storage with morphis interface
     cic.rs            cloud-in-cell mass assignment + force interpolation
     poisson.rs        FFT Poisson solver (ndrustfft)
-    initial.rs        Zel'dovich ICs from Eisenstein-Hu power spectrum
     integrator.rs     symplectic KDK leapfrog
     diagnostics.rs    conservation audits
-    simulation.rs     simulation driver
+    simulation.rs     simulation driver (from_scene + from_config)
   io/                 data I/O
     snapshot.rs       Snapshot type, bincode serialization
     observer.rs       Observer trait (legacy, used by tests)
@@ -52,8 +51,9 @@ src/
     cli.rs            clap-based CLI
     runner.rs         mode routing (headless, live, playback, record)
     pipeline.rs       threaded pipeline: router, disk writer, precompute, viewer
-  scenes/             simulation scenarios
-    cosmic_web.rs     Zel'dovich PM in a periodic box (default)
+  scenes/             simulation scenarios (each a subdirectory)
+    cosmic_web/       Zel'dovich PM in a 100 Mpc periodic box (default)
+    galaxy_group/     constrained Zel'dovich in a 3 Mpc box
   vis/                visualization (#[cfg(feature = "vis")])
     viewer.rs         static 3D particle viewer (kiss3d)
     plots.rs          density slices, P(k), conservation plots (plotters)

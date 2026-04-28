@@ -127,6 +127,10 @@ pub fn assign_density(particles: &Particles, grid: &Grid) -> ScalarField {
 
 /// Interpolate a vector force field at particle positions using CIC weights.
 ///
+/// The force on particle n is F_n = m_p × Σ F(x_g) W(x_n - x_g),
+/// where the m_p factor converts the acceleration field to a force
+/// consistent with the canonical momentum p = m a² dx/dt.
+///
 /// Returns morphis-aware `ParticleForces`. Uses the same trilinear kernel
 /// as `assign_density` to ensure momentum conservation by kernel symmetry.
 pub fn interpolate_force(
@@ -138,6 +142,7 @@ pub fn interpolate_force(
     let n = grid.n_cells;
     let h = grid.cell_length;
     let h_inv = 1.0 / h;
+    let mass_particle = particles.mass_particle;
     let mut result = Array2::zeros((3, n_particles));
 
     for p in 0..n_particles {
@@ -172,7 +177,7 @@ pub fn interpolate_force(
                 let g1 = ((base[1] + b as isize) % n as isize + n as isize) as usize % n;
                 for (c, &weight_c) in weight[2].iter().enumerate() {
                     let g2 = ((base[2] + c as isize) % n as isize + n as isize) as usize % n;
-                    let w = weight_a * weight_b * weight_c;
+                    let w = mass_particle * weight_a * weight_b * weight_c;
                     for d in 0..3 {
                         result[[d, p]] += force.data[d][[g0, g1, g2]] * w;
                     }

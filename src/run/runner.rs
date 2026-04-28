@@ -22,7 +22,9 @@ pub fn run(cli: &Cli) -> Result<(), HermesError> {
         return run_playback(dir, cli);
     }
 
-    let config = load_config(cli)?;
+    // Look up scene first so its defaults can be merged into config.
+    let scene = scene_by_name(&cli.scene)?;
+    let config = load_config(cli, scene.default_overrides())?;
 
     if !cli.quiet {
         print_header(&config, cli);
@@ -55,19 +57,22 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     let total_steps = config.time.n_steps;
 
     // Simulation → Router channel.
-    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(8);
+    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(512);
     let sender = SnapshotSender::new(sim_tx);
 
     // Build consumer list.
-    let mut consumer_senders = Vec::new();
+    let mut consumer_senders: Vec<pipeline::ConsumerConfig> = Vec::new();
     let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
 
     if let Some(ref dir) = save_dir {
         if !quiet {
             println!("Saving snapshots to {dir}/");
         }
-        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(16);
-        consumer_senders.push(disk_tx);
+        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(512);
+        consumer_senders.push(pipeline::ConsumerConfig {
+            tx: disk_tx,
+            droppable: false,
+        });
         let dir_owned = dir.clone();
         handles.push(spawn_disk_writer(disk_rx, dir_owned));
     }
@@ -81,7 +86,7 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
         .name("simulation".to_string())
         .spawn(move || -> Result<crate::physics::simulation::Simulation, HermesError> {
             let scene = scene_by_name(&scene_name)?;
-            let mut sim = scene.initialize(&config, seed)?;
+            let mut sim = crate::physics::simulation::Simulation::from_scene(&*scene, config, seed)?;
 
             if !quiet {
                 use indicatif::{ProgressBar, ProgressStyle};
@@ -161,22 +166,28 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     }
 
     // Simulation → Router.
-    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(8);
+    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(512);
     let sender = SnapshotSender::new(sim_tx);
 
-    let mut consumer_senders = Vec::new();
+    let mut consumer_senders: Vec<pipeline::ConsumerConfig> = Vec::new();
     let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
 
     // Disk writer (optional).
     if let Some(ref dir) = save_dir {
-        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(16);
-        consumer_senders.push(disk_tx);
+        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(512);
+        consumer_senders.push(pipeline::ConsumerConfig {
+            tx: disk_tx,
+            droppable: false,
+        });
         handles.push(spawn_disk_writer(disk_rx, dir.clone()));
     }
 
     // Precompute → Viewer channel.
     let (precompute_tx, precompute_rx) = mpsc::sync_channel::<PipelineMessage>(4);
-    consumer_senders.push(precompute_tx);
+    consumer_senders.push(pipeline::ConsumerConfig {
+        tx: precompute_tx,
+        droppable: true,
+    });
 
     let (frame_tx, frame_rx) = mpsc::sync_channel::<pipeline::ViewerMessage>(4);
     handles.push(pipeline::spawn_precompute(
@@ -193,7 +204,8 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
         .name("simulation".to_string())
         .spawn(move || -> Result<(), HermesError> {
             let scene = scene_by_name(&scene_name)?;
-            let mut sim = scene.initialize(&config, seed)?;
+            let mut sim =
+                crate::physics::simulation::Simulation::from_scene(&*scene, config, seed)?;
             sim.run_into_pipeline(&sender, |_, _| {})?;
 
             Ok(())
@@ -244,7 +256,8 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
     use crate::colormap::colormap_hot;
     use crate::io::snapshot::load_snapshot;
 
-    let total = pipeline::count_snapshots(dir);
+    let snapshot_paths = pipeline::find_snapshot_paths(dir);
+    let total = snapshot_paths.len();
     if total == 0 {
         return Err(HermesError::Config(format!("no snapshots found in {dir}/")));
     }
@@ -257,7 +270,7 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
     let height = 512_u32;
     let point_radius = 1_i32;
 
-    let first = load_snapshot(std::path::Path::new(&format!("{dir}/snapshot-00000.bin")))?;
+    let first = load_snapshot(&snapshot_paths[0])?;
     let box_length = first
         .positions
         .iter()
@@ -292,9 +305,8 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
         None
     };
 
-    for step in 0..total {
-        let path = format!("{dir}/snapshot-{step:05}.bin");
-        let snapshot = load_snapshot(std::path::Path::new(&path))?;
+    for path in &snapshot_paths {
+        let snapshot = load_snapshot(path)?;
 
         let speeds: Vec<f64> = snapshot.momenta.iter().map(|mom| mom.norm()).collect();
         let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
@@ -364,7 +376,10 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
 // Config loading
 // ============================================================================
 
-fn load_config(cli: &Cli) -> Result<Configuration, HermesError> {
+fn load_config(
+    cli: &Cli,
+    scene_defaults: Option<toml::Value>,
+) -> Result<Configuration, HermesError> {
     let file_override = if let Some(ref path) = cli.config_file {
         let content = std::fs::read_to_string(path)?;
         let value: toml::Value = toml::from_str(&content)
@@ -400,7 +415,25 @@ fn load_config(cli: &Cli) -> Result<Configuration, HermesError> {
         Some(toml::Value::Table(overrides))
     };
 
-    crate::config::build_configuration(file_override.as_ref(), programmatic.as_ref())
+    // Four-tier merge: global defaults → scene defaults → user file → CLI overrides.
+    // build_configuration does: defaults → config_file → overrides.
+    // We insert scene defaults as the config_file tier, and merge the actual
+    // user file into overrides if both are present.
+    match (scene_defaults, file_override) {
+        (Some(scene), Some(file)) => {
+            // Scene defaults as first override, then user file, then CLI.
+            let mut combined = scene;
+            crate::config::deep_merge_public(&mut combined, &file);
+            if let Some(ref prog) = programmatic {
+                crate::config::deep_merge_public(&mut combined, prog);
+            }
+            crate::config::build_configuration(Some(&combined), None)
+        }
+        (Some(scene), None) => {
+            crate::config::build_configuration(Some(&scene), programmatic.as_ref())
+        }
+        (None, file) => crate::config::build_configuration(file.as_ref(), programmatic.as_ref()),
+    }
 }
 
 fn print_header(config: &Configuration, cli: &Cli) {

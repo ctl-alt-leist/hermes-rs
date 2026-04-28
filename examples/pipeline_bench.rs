@@ -103,7 +103,13 @@ fn main() {
         let sender = SnapshotSender::new(sim_tx);
         let dir = format!("data/bench-pipeline-{n}");
         let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(16);
-        let router_handle = spawn_router(router_rx, vec![disk_tx]);
+        let router_handle = spawn_router(
+            router_rx,
+            vec![hermes_rs::run::pipeline::ConsumerConfig {
+                tx: disk_tx,
+                droppable: false,
+            }],
+        );
         let disk_handle = spawn_disk_writer(disk_rx, dir);
         let start = Instant::now();
         sim.run_into_pipeline(&sender, |_, _| {}).unwrap();
