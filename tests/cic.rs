@@ -185,30 +185,35 @@ fn uniform_force_returns_same_for_all_particles() {
     let grid = Grid::new(8, 80.0);
     let particles = Particles::on_lattice(4, &grid, 1e-7);
 
-    // Uniform force field: F = (1.0, 2.0, 3.0) everywhere.
-    let mut force = VectorField::zeros(&grid);
-    force.data[0].fill(1.0);
-    force.data[1].fill(2.0);
-    force.data[2].fill(3.0);
+    // Uniform acceleration field: a = (1.0, 2.0, 3.0) everywhere.
+    // Force = m_p * acceleration.
+    let mut accel_field = VectorField::zeros(&grid);
+    accel_field.data[0].fill(1.0);
+    accel_field.data[1].fill(2.0);
+    accel_field.data[2].fill(3.0);
 
-    let forces = interpolate_force(&force, &particles, &grid);
+    let forces = interpolate_force(&accel_field, &particles, &grid);
+    let mass_particle = particles.mass_particle;
 
     for p in 0..particles.count() {
         let force_p = forces.force_on(p);
         assert!(
-            (force_p.component(&[0]) - 1.0).abs() < 1e-12,
-            "particle {p}: Fx = {}, expected 1.0",
-            force_p.component(&[0])
+            (force_p.component(&[0]) - 1.0 * mass_particle).abs() / mass_particle < 1e-12,
+            "particle {p}: Fx = {}, expected {}",
+            force_p.component(&[0]),
+            1.0 * mass_particle
         );
         assert!(
-            (force_p.component(&[1]) - 2.0).abs() < 1e-12,
-            "particle {p}: Fy = {}, expected 2.0",
-            force_p.component(&[1])
+            (force_p.component(&[1]) - 2.0 * mass_particle).abs() / mass_particle < 1e-12,
+            "particle {p}: Fy = {}, expected {}",
+            force_p.component(&[1]),
+            2.0 * mass_particle
         );
         assert!(
-            (force_p.component(&[2]) - 3.0).abs() < 1e-12,
-            "particle {p}: Fz = {}, expected 3.0",
-            force_p.component(&[2])
+            (force_p.component(&[2]) - 3.0 * mass_particle).abs() / mass_particle < 1e-12,
+            "particle {p}: Fz = {}, expected {}",
+            force_p.component(&[2]),
+            3.0 * mass_particle
         );
     }
 }
@@ -220,27 +225,31 @@ fn interpolation_at_cell_center_reads_cell_value() {
     let center = grid.cell_center(3, 3, 3);
     particles.set_position(0, &vector_from_array(center));
 
-    let mut force = VectorField::zeros(&grid);
-    force.data[0][[3, 3, 3]] = 7.0;
-    force.data[1][[3, 3, 3]] = 8.0;
-    force.data[2][[3, 3, 3]] = 9.0;
+    let mut accel_field = VectorField::zeros(&grid);
+    accel_field.data[0][[3, 3, 3]] = 7.0;
+    accel_field.data[1][[3, 3, 3]] = 8.0;
+    accel_field.data[2][[3, 3, 3]] = 9.0;
 
-    let forces = interpolate_force(&force, &particles, &grid);
+    let forces = interpolate_force(&accel_field, &particles, &grid);
     let force_0 = forces.force_on(0);
+    let mass_particle = particles.mass_particle;
 
     assert!(
-        (force_0.component(&[0]) - 7.0).abs() < 1e-12,
-        "Fx at cell center: expected 7.0, got {}",
+        (force_0.component(&[0]) - 7.0 * mass_particle).abs() < 1e-2,
+        "Fx at cell center: expected {}, got {}",
+        7.0 * mass_particle,
         force_0.component(&[0])
     );
     assert!(
-        (force_0.component(&[1]) - 8.0).abs() < 1e-12,
-        "Fy at cell center: expected 8.0, got {}",
+        (force_0.component(&[1]) - 8.0 * mass_particle).abs() < 1e-2,
+        "Fy at cell center: expected {}, got {}",
+        8.0 * mass_particle,
         force_0.component(&[1])
     );
     assert!(
-        (force_0.component(&[2]) - 9.0).abs() < 1e-12,
-        "Fz at cell center: expected 9.0, got {}",
+        (force_0.component(&[2]) - 9.0 * mass_particle).abs() < 1e-2,
+        "Fz at cell center: expected {}, got {}",
+        9.0 * mass_particle,
         force_0.component(&[2])
     );
 }
