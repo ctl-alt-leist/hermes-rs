@@ -1,14 +1,23 @@
 # Galaxy group scene defaults.
-# A 10 Mpc periodic box — large enough for group-scale structure
-# (filaments, a few halos, voids) with better-resolved dynamics
-# than the full cosmic web.
+# Two colliding dark matter halos in a periodic box.
+#
+# Physical setup:
+#   - Two ~5e12 M_sun halos (group-mass, several Milky Ways each)
+#   - Virial radius ~500 kpc each
+#   - Separated by ~2.4 Mpc, approaching each other
+#   - Box is 6 Mpc — periodic images are ~3 Mpc from halo edges
+#   - Start at a = 1.0 (z = 0) — halos are already formed
+#
+# The evolution runs forward in time from a = 1.0 to a = 1.5,
+# corresponding to ~5 Gyr of future evolution.
 
 [simulation]
-n_cells      = 64
-n_particles  = 64
-box_length   = 10000.0    # 10 Mpc in kpc
+n_cells      = 32
+n_particles  = 32
+box_length   = 6000.0     # 6 Mpc in kpc
 
 [time]
-scale_factor_initial = 0.02   # z ~ 49
-scale_factor_final   = 1.0    # z = 0
+scale_factor_initial = 1.0    # z = 0 (present day)
+scale_factor_final   = 1.5    # ~5 Gyr into the future
 n_steps              = 300
+stepping             = "linear_a"

@@ -1,26 +1,10 @@
-//! Constrained Zel'dovich initialization for galaxy group formation.
+//! Galaxy group initial conditions: colliding dark matter halos.
 //!
-//! Uses the same Zel'dovich approximation as the cosmic web, but adds
-//! a uniform overdensity bias to the initial density field. This
-//! ensures the entire box is a Lagrangian region that will collapse
-//! into a group-mass structure by z = 0.
-//!
-//! The bias δ_0 is chosen so that the linear overdensity at z = 0
-//! exceeds the spherical collapse threshold δ_c ≈ 1.686. For a
-//! starting redshift z_init, the required initial overdensity is:
-//!
-//! ```text
-//! δ_init = δ_c / D_+(a = 1) × D_+(a_init)
-//! ```
-//!
-//! In practice we use a slightly lower value so the collapse happens
-//! around z ~ 0.5-1, giving the group time to virialize.
+//! Places two spherical halos with NFW-like radial density profiles,
+//! separated in space with a relative bulk velocity. The particles
+//! are distributed within each halo using rejection sampling from
+//! the density profile.
 
-use crate::scenes::cosmic_web::init::power_spectrum;
-
-use ndarray::Array3;
-use ndrustfft::{FftHandler, R2cFftHandler, ndifft, ndifft_r2c};
-use num_complex::Complex64;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -31,169 +15,164 @@ use crate::physics::cosmology::Cosmology;
 use crate::physics::grid::Grid;
 use crate::physics::particles::Particles;
 
-/// Generate constrained Zel'dovich initial conditions for a galaxy group.
+/// Generate initial conditions for two colliding halos.
 ///
-/// Same pipeline as the standard Zel'dovich approximation, but with a
-/// uniform overdensity bias added to the density field. The bias
-/// ensures the box collapses into a group-mass halo.
-pub fn constrained_zeldovich_init(
+/// Each halo has an NFW-like density profile truncated at the virial
+/// radius. The halos are placed symmetrically about the box center
+/// with a relative approach velocity.
+pub fn colliding_halos_init(
     n_per_side: usize,
     grid: &Grid,
     cosmology: &Cosmology,
-    scale_factor_initial: f64,
+    _scale_factor_initial: f64,
     seed: u64,
 ) -> Result<Particles, HermesError> {
-    let n = grid.n_cells;
-    let n_complex = n / 2 + 1;
+    let n_total = n_per_side * n_per_side * n_per_side;
     let box_length = grid.box_length;
+    let box_center = box_length / 2.0;
 
-    // Overdensity bias: target δ_c / D+(1) at the initial redshift.
-    // δ_c ≈ 1.686 for spherical collapse. We use 0.8 × δ_c so the
-    // collapse completes around z ~ 0.5, giving time to virialize.
-    let collapse_fraction = 0.8;
-    let delta_c = 1.686;
-    let growth_initial = cosmology.growth_factor(scale_factor_initial);
-    let overdensity_bias = collapse_fraction * delta_c * growth_initial;
-
-    // Generate Gaussian random overdensity in Fourier space.
-    let mut rng = ChaCha20Rng::seed_from_u64(seed);
-    let mut delta_hat = Array3::<Complex64>::zeros((n, n, n_complex));
-
-    let k_to_hmpc = 1000.0 / cosmology.hubble;
-    let volume_box = box_length * box_length * box_length;
-
-    for m0 in 0..n {
-        let kx = grid.wavevector_component(m0);
-        for m1 in 0..n {
-            let ky = grid.wavevector_component(m1);
-            for m2 in 0..n_complex {
-                let kz = grid.wavevector_component(m2);
-                let k2 = kx * kx + ky * ky + kz * kz;
-
-                if k2 < 1e-30 {
-                    // Zero mode: set to the overdensity bias.
-                    // In Fourier convention, δ̂(k=0) = δ_0 × V_box^{1/2}
-                    // (the mean overdensity times the box volume normalization).
-                    delta_hat[[m0, m1, m2]] = Complex64::new(
-                        overdensity_bias * volume_box.sqrt() / k_to_hmpc.powf(1.5),
-                        0.0,
-                    );
-                    continue;
-                }
-
-                let k_mag = k2.sqrt();
-                let k_hmpc = k_mag * k_to_hmpc;
-                let power = power_spectrum(k_hmpc, cosmology);
-
-                let volume_hmpc3 = volume_box / k_to_hmpc.powi(3);
-                let sigma = (power / volume_hmpc3).sqrt();
-
-                let re: f64 = rng.random_range(-1.0..1.0);
-                let im: f64 = rng.random_range(-1.0..1.0);
-                delta_hat[[m0, m1, m2]] = Complex64::new(re * sigma, im * sigma);
-            }
-        }
-    }
-
-    // Compute displacement field: Ψ̂_d(k) = i k_d / k² × δ̂(k)
-    let growth = cosmology.growth_factor(scale_factor_initial);
-
-    let mut displacement: [Array3<f64>; 3] = std::array::from_fn(|_| Array3::zeros((n, n, n)));
-
-    for (d, displacement_d) in displacement.iter_mut().enumerate() {
-        let mut psi_hat = Array3::<Complex64>::zeros((n, n, n_complex));
-
-        for m0 in 0..n {
-            let kx = grid.wavevector_component(m0);
-            for m1 in 0..n {
-                let ky = grid.wavevector_component(m1);
-                for m2 in 0..n_complex {
-                    let kz = grid.wavevector_component(m2);
-                    let k2 = kx * kx + ky * ky + kz * kz;
-
-                    if k2 < 1e-30 {
-                        continue;
-                    }
-
-                    let kd = match d {
-                        0 => kx,
-                        1 => ky,
-                        _ => kz,
-                    };
-
-                    psi_hat[[m0, m1, m2]] = Complex64::new(0.0, kd / k2) * delta_hat[[m0, m1, m2]];
-                }
-            }
-        }
-
-        let handler_c2c_0 = FftHandler::new(n);
-        let handler_c2c_1 = FftHandler::new(n);
-        let handler_r2c = R2cFftHandler::new(n);
-        let mut scratch = psi_hat.clone();
-
-        ndifft(&psi_hat, &mut scratch, &handler_c2c_0, 0);
-        psi_hat.assign(&scratch);
-        ndifft(&psi_hat, &mut scratch, &handler_c2c_1, 1);
-        psi_hat.assign(&scratch);
-
-        let mut real_out = Array3::<f64>::zeros((n, n, n));
-        ndifft_r2c(&psi_hat, &mut real_out, &handler_r2c, 2);
-
-        *displacement_d = real_out;
-    }
-
-    // Place particles on Lagrangian lattice and displace.
+    // Total mass in the box from cosmology.
     let density_mean = cosmology.density_matter();
-    let mut particles = Particles::on_lattice(n_per_side, grid, density_mean);
+    let mass_total = density_mean * grid.box_volume();
+    let mass_particle = mass_total / n_total as f64;
 
-    let growth_rate = cosmology.growth_rate(scale_factor_initial);
-    let hubble_a = cosmology.hubble_parameter(scale_factor_initial);
-    let velocity_factor = scale_factor_initial
-        * scale_factor_initial
-        * growth_rate
-        * hubble_a
-        * particles.mass_particle;
+    // Two equal-mass halos, each getting half the particles.
+    let n_per_halo = n_total / 2;
+    let mass_halo = mass_particle * n_per_halo as f64;
 
-    for p in 0..particles.count() {
-        let pos = particles.position_components(p);
-        let psi = interpolate_displacement(&displacement, &pos, grid);
+    // Halo parameters.
+    let radius_virial = box_length * 0.12; // virial radius ~ 12% of box
+    let concentration = 10.0; // typical NFW concentration
+    let scale_radius = radius_virial / concentration;
 
-        let position_displaced = vector_from_components(
-            pos[0] + growth * psi[0],
-            pos[1] + growth * psi[1],
-            pos[2] + growth * psi[2],
-        );
-        particles.set_position(p, &position_displaced);
+    // Separation: halos placed 40% of box apart, centered in the box.
+    let separation = box_length * 0.4;
 
-        let momentum = vector_from_components(
-            velocity_factor * psi[0],
-            velocity_factor * psi[1],
-            velocity_factor * psi[2],
-        );
-        particles.set_momentum(p, &momentum);
-    }
+    // Approach velocity: roughly the circular velocity at the virial radius.
+    // v_circ = sqrt(G M / r_vir)
+    let g = crate::physics::constants::G;
+    let velocity_approach = (g * mass_halo / radius_virial).sqrt() * 0.5;
+
+    let mut particles = Particles::zeros(n_total, mass_particle);
+    let mut rng = ChaCha20Rng::seed_from_u64(seed);
+
+    // Halo 1: left of center, moving right.
+    let center_1 = [box_center - separation / 2.0, box_center, box_center];
+    let velocity_1 = [velocity_approach, 0.0, 0.0];
+
+    sample_nfw_halo(
+        &mut particles,
+        0,
+        n_per_halo,
+        &center_1,
+        &velocity_1,
+        radius_virial,
+        scale_radius,
+        mass_particle,
+        &mut rng,
+    );
+
+    // Halo 2: right of center, moving left.
+    let center_2 = [box_center + separation / 2.0, box_center, box_center];
+    let velocity_2 = [-velocity_approach, 0.0, 0.0];
+
+    sample_nfw_halo(
+        &mut particles,
+        n_per_halo,
+        n_per_halo,
+        &center_2,
+        &velocity_2,
+        radius_virial,
+        scale_radius,
+        mass_particle,
+        &mut rng,
+    );
 
     particles.wrap_positions(grid);
 
     Ok(particles)
 }
 
-/// Interpolate the displacement field at a position using nearest grid point.
-fn interpolate_displacement(
-    displacement: &[Array3<f64>; 3],
-    pos: &[f64; 3],
-    grid: &Grid,
-) -> [f64; 3] {
-    let h_inv = 1.0 / grid.cell_length;
-    let n = grid.n_cells;
+#[allow(clippy::too_many_arguments)]
+/// Sample particles from an NFW density profile using rejection sampling.
+///
+/// NFW profile: rho(r) = rho_0 / [(r/r_s)(1 + r/r_s)^2]
+///
+/// Particles are placed with the given bulk velocity plus a small
+/// isotropic velocity dispersion for stability.
+fn sample_nfw_halo(
+    particles: &mut Particles,
+    start_index: usize,
+    n_particles: usize,
+    center: &[f64; 3],
+    bulk_velocity: &[f64; 3],
+    radius_virial: f64,
+    scale_radius: f64,
+    mass_particle: f64,
+    rng: &mut ChaCha20Rng,
+) {
+    let g = crate::physics::constants::G;
 
-    let m0 = ((pos[0] * h_inv) as usize).min(n - 1);
-    let m1 = ((pos[1] * h_inv) as usize).min(n - 1);
-    let m2 = ((pos[2] * h_inv) as usize).min(n - 1);
+    // Velocity dispersion: approximate as fraction of circular velocity.
+    let mass_enclosed = mass_particle * n_particles as f64;
+    let velocity_dispersion = (g * mass_enclosed / radius_virial).sqrt() * 0.3;
 
-    [
-        displacement[0][[m0, m1, m2]],
-        displacement[1][[m0, m1, m2]],
-        displacement[2][[m0, m1, m2]],
-    ]
+    // NFW profile peaks at r = 0. The maximum density is at the smallest
+    // radius we sample. We use rejection sampling in spherical shells.
+    let mut placed = 0;
+
+    while placed < n_particles {
+        // Sample uniformly in the sphere of radius r_vir.
+        let x: f64 = rng.random_range(-1.0..1.0);
+        let y: f64 = rng.random_range(-1.0..1.0);
+        let z: f64 = rng.random_range(-1.0..1.0);
+        let r2 = x * x + y * y + z * z;
+
+        if !(1e-6..=1.0).contains(&r2) {
+            continue; // outside unit sphere or too close to center
+        }
+
+        let r = r2.sqrt() * radius_virial;
+        let s = r / scale_radius;
+
+        // NFW density (unnormalized): 1 / [s * (1 + s)^2]
+        let density = 1.0 / (s * (1.0 + s) * (1.0 + s));
+
+        // Rejection: accept with probability proportional to density.
+        // Max density is at r → 0 (s → 0), which diverges. We cap at
+        // s_min corresponding to the inner resolution limit.
+        let s_min = 0.01;
+        let density_max = 1.0 / (s_min * (1.0 + s_min) * (1.0 + s_min));
+        let accept_probability = density / density_max;
+
+        let u: f64 = rng.random_range(0.0..1.0);
+        if u > accept_probability {
+            continue;
+        }
+
+        let p = start_index + placed;
+
+        // Position: center + r * (x, y, z) / |xyz|
+        let position = vector_from_components(
+            center[0] + x * radius_virial,
+            center[1] + y * radius_virial,
+            center[2] + z * radius_virial,
+        );
+        particles.set_position(p, &position);
+
+        // Momentum: bulk velocity + isotropic dispersion.
+        let vx: f64 = rng.random_range(-1.0..1.0);
+        let vy: f64 = rng.random_range(-1.0..1.0);
+        let vz: f64 = rng.random_range(-1.0..1.0);
+
+        // p = m * a^2 * dx/dt. At a = 1 (or whatever a_init), p = m * v.
+        let momentum = vector_from_components(
+            mass_particle * (bulk_velocity[0] + velocity_dispersion * vx),
+            mass_particle * (bulk_velocity[1] + velocity_dispersion * vy),
+            mass_particle * (bulk_velocity[2] + velocity_dispersion * vz),
+        );
+        particles.set_momentum(p, &momentum);
+
+        placed += 1;
+    }
 }

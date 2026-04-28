@@ -30,9 +30,9 @@ impl Scene for GalaxyGroup {
     }
 
     fn validate(&self, config: &Configuration) -> Result<(), HermesError> {
-        if config.simulation.box_length > 20_000.0 {
+        if config.simulation.box_length > 10_000.0 {
             return Err(HermesError::Config(
-                "galaxy-group scene expects box_length <= 20 Mpc (20000 kpc)".to_string(),
+                "galaxy-group scene expects box_length <= 10 Mpc (10000 kpc)".to_string(),
             ));
         }
 
@@ -46,7 +46,7 @@ impl Scene for GalaxyGroup {
         config: &Configuration,
         seed: u64,
     ) -> Result<Particles, HermesError> {
-        init::constrained_zeldovich_init(
+        init::colliding_halos_init(
             config.simulation.n_particles,
             grid,
             cosmology,
