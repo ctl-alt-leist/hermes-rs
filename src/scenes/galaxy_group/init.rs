@@ -85,7 +85,8 @@ pub fn constrained_zeldovich_init(
                 let k_hmpc = k_mag * k_to_hmpc;
                 let power = power_spectrum(k_hmpc, cosmology);
 
-                let sigma = (power * volume_box / k_to_hmpc.powi(3)).sqrt();
+                let volume_hmpc3 = volume_box / k_to_hmpc.powi(3);
+                let sigma = (power / volume_hmpc3).sqrt();
 
                 let re: f64 = rng.random_range(-1.0..1.0);
                 let im: f64 = rng.random_range(-1.0..1.0);

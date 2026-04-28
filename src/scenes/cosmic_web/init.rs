@@ -162,8 +162,10 @@ pub fn zeldovich_init(
                 let k_hmpc = k_mag * k_to_hmpc;
                 let power = power_spectrum(k_hmpc, cosmology);
 
-                // Variance of this mode: P(k) × V_box (discrete Fourier convention).
-                let sigma = (power * volume_box / k_to_hmpc.powi(3)).sqrt();
+                // Variance of this Fourier mode: P(k) / V_box in consistent units.
+                // P(k) is in (Mpc/h)^3, V_box in (Mpc/h)^3.
+                let volume_hmpc3 = volume_box / k_to_hmpc.powi(3);
+                let sigma = (power / volume_hmpc3).sqrt();
 
                 // Draw complex Gaussian with this variance.
                 let re: f64 = rng.random_range(-1.0..1.0);
