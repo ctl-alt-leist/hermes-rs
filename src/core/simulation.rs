@@ -101,8 +101,9 @@ impl Simulation {
         );
 
         // Notify observers with initial snapshot.
-        if let Some(particles) = self.content.particles() {
-            let initial_snapshot = Snapshot::capture_lightweight(particles, 0, self.scale_factor);
+        {
+            let initial_snapshot =
+                Snapshot::capture_from_content(&self.content, 0, self.scale_factor);
             for observer in observers.iter_mut() {
                 observer.on_snapshot(&initial_snapshot);
             }
@@ -127,9 +128,9 @@ impl Simulation {
             on_step(self.step, self.scale_factor);
 
             // Lightweight snapshot for observers every step.
-            if has_observers && let Some(particles) = self.content.particles() {
+            if has_observers {
                 let snapshot =
-                    Snapshot::capture_lightweight(particles, self.step, self.scale_factor);
+                    Snapshot::capture_from_content(&self.content, self.step, self.scale_factor);
                 for observer in observers.iter_mut() {
                     observer.on_snapshot(&snapshot);
                 }
@@ -184,14 +185,12 @@ impl Simulation {
         );
 
         // Send initial snapshot.
-        if let Some(particles) = self.content.particles() {
-            let initial = std::sync::Arc::new(Snapshot::capture_lightweight(
-                particles,
-                0,
-                self.scale_factor,
-            ));
-            sender.send(initial);
-        }
+        let initial = std::sync::Arc::new(Snapshot::capture_from_content(
+            &self.content,
+            0,
+            self.scale_factor,
+        ));
+        sender.send(initial);
 
         for n in 0..self.config.time.n_steps {
             let scale_factor_prev = schedule[n];
@@ -210,14 +209,12 @@ impl Simulation {
             on_step(self.step, self.scale_factor);
 
             // Lightweight snapshot.
-            if let Some(particles) = self.content.particles() {
-                let snapshot = std::sync::Arc::new(Snapshot::capture_lightweight(
-                    particles,
-                    self.step,
-                    self.scale_factor,
-                ));
-                sender.send(snapshot);
-            }
+            let snapshot = std::sync::Arc::new(Snapshot::capture_from_content(
+                &self.content,
+                self.step,
+                self.scale_factor,
+            ));
+            sender.send(snapshot);
 
             // Full diagnostics at wider interval.
             let is_diagnostic_step = self

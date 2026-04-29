@@ -223,7 +223,12 @@ pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFr
     let scale = 1.0 / box_length as f32;
     let n = snapshot.particle_count();
 
-    let speeds: Vec<f64> = snapshot.momenta.iter().map(|mom| mom.norm()).collect();
+    let speeds: Vec<f64> = snapshot
+        .momenta()
+        .unwrap()
+        .iter()
+        .map(|mom| mom.norm())
+        .collect();
 
     let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
     let speed_min = speeds.iter().copied().fold(f64::MAX, f64::min);
@@ -232,7 +237,7 @@ pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFr
     let mut positions = Vec::with_capacity(n);
     let mut colors = Vec::with_capacity(n);
 
-    for (pos, &speed) in snapshot.positions.iter().zip(speeds.iter()) {
+    for (pos, &speed) in snapshot.positions().unwrap().iter().zip(speeds.iter()) {
         positions.push([
             pos.component(&[0]) as f32 * scale - 0.5,
             pos.component(&[1]) as f32 * scale - 0.5,

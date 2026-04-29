@@ -30,7 +30,7 @@ fn snapshot_has_correct_particle_count() {
 fn snapshot_positions_are_grade_1() {
     let snapshot = test_snapshot();
 
-    for pos in &snapshot.positions {
+    for pos in snapshot.positions().unwrap() {
         assert_eq!(pos.grade(), 1);
     }
 }
@@ -39,7 +39,7 @@ fn snapshot_positions_are_grade_1() {
 fn snapshot_momenta_are_grade_1() {
     let snapshot = test_snapshot();
 
-    for mom in &snapshot.momenta {
+    for mom in snapshot.momenta().unwrap() {
         assert_eq!(mom.grade(), 1);
     }
 }
@@ -73,12 +73,11 @@ fn snapshot_roundtrip_via_disk() {
     assert_eq!(loaded.step, snapshot.step);
     assert!((loaded.scale_factor - snapshot.scale_factor).abs() < 1e-15);
     assert_eq!(loaded.particle_count(), snapshot.particle_count());
-    assert!((loaded.mass_particle - snapshot.mass_particle).abs() < 1e-15);
 
     // Positions roundtrip through morphis → flat → morphis.
     for n in 0..snapshot.particle_count() {
-        let original = &snapshot.positions[n];
-        let restored = &loaded.positions[n];
+        let original = &snapshot.positions().unwrap()[n];
+        let restored = &loaded.positions().unwrap()[n];
 
         assert_eq!(restored.grade(), 1);
         for d in 0..3 {
@@ -143,8 +142,8 @@ fn memory_observer_preserves_morphis_types() {
     observer.on_snapshot(&snapshot);
 
     let stored = &observer.snapshots()[0];
-    assert_eq!(stored.positions[0].grade(), 1);
-    assert_eq!(stored.momenta[0].grade(), 1);
+    assert_eq!(stored.positions().unwrap()[0].grade(), 1);
+    assert_eq!(stored.momenta().unwrap()[0].grade(), 1);
 }
 
 #[test]

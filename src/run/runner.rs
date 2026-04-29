@@ -271,9 +271,10 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
 
     let first = load_snapshot(&snapshot_paths[0])?;
     let box_length = first
-        .positions
+        .positions()
+        .unwrap_or(&[])
         .iter()
-        .flat_map(|pos| (0..3).map(move |d| pos.component(&[d]).abs()))
+        .flat_map(|pos: &morphis::vector::Vector<3>| (0..3).map(move |d| pos.component(&[d]).abs()))
         .fold(0.0_f64, f64::max)
         * 1.1;
     let scale = 1.0 / box_length;
@@ -307,7 +308,12 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
     for path in &snapshot_paths {
         let snapshot = load_snapshot(path)?;
 
-        let speeds: Vec<f64> = snapshot.momenta.iter().map(|mom| mom.norm()).collect();
+        let speeds: Vec<f64> = snapshot
+            .momenta()
+            .unwrap()
+            .iter()
+            .map(|mom| mom.norm())
+            .collect();
         let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
         let speed_min = speeds.iter().copied().fold(f64::MAX, f64::min);
         let speed_range = (speed_max - speed_min).max(1e-30);
@@ -317,7 +323,7 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
             pixel[3] = 255;
         }
 
-        for (pos, &speed) in snapshot.positions.iter().zip(speeds.iter()) {
+        for (pos, &speed) in snapshot.positions().unwrap().iter().zip(speeds.iter()) {
             let x_norm = pos.component(&[0]) * scale;
             let y_norm = pos.component(&[1]) * scale;
 
