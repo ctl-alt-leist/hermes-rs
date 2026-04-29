@@ -76,8 +76,11 @@ pub struct FieldState {
 
 /// Parameters for field-theoretic dynamics.
 pub struct FieldParams {
-    /// Effective Planck constant (sets de Broglie wavelength scale).
-    pub hbar_eff: f64,
+    /// Smoothing length scale. Controls the coherence length of the
+    /// wavefunction — the scale below which wave interference prevents
+    /// orbit crossing. Balances against gravity: large ell means strong
+    /// dispersive pressure, small ell means gravity dominates.
+    pub smoothing_length: f64,
     /// Dark matter field particle mass.
     pub mass_alpha: f64,
 }
@@ -85,7 +88,7 @@ pub struct FieldParams {
 impl Default for FieldParams {
     fn default() -> Self {
         Self {
-            hbar_eff: 1.0,
+            smoothing_length: 1.0,
             mass_alpha: 1.0,
         }
     }

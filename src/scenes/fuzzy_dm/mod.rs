@@ -42,7 +42,7 @@ impl Scene for FuzzyDM {
             MorphisGrid::<3>::new(config.simulation.n_cells, config.simulation.box_length);
 
         let params = FieldParams {
-            hbar_eff: 1.0,
+            smoothing_length: 1.0,
             mass_alpha: 1.0,
         };
 

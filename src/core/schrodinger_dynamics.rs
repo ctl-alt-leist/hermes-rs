@@ -3,8 +3,8 @@
 //! Evolves a wavefunction psi in G^+ (even subalgebra) under
 //! self-gravity via the symmetric split-step method:
 //!
-//!   1. Kinetic half-step (Fourier space): phase rotation by -hbar |k|^2 dt / (2m)
-//!   2. Potential full step (real space): Poisson solve, phase rotation by -m Phi dt / hbar
+//!   1. Kinetic half-step (Fourier space): phase rotation by -ell |k|^2 dt / (2m)
+//!   2. Potential full step (real space): Poisson solve, phase rotation by -m Phi dt / ell
 //!   3. Kinetic half-step (repeat step 1)
 //!
 //! The kinetic step uses FFT to transform the wavefunction components
@@ -61,26 +61,18 @@ impl Dynamics for SchrodingerPoissonDynamics {
         let dt = (scale_factor_next - scale_factor_prev)
             / (scale_factor * cosmology.hubble_parameter(scale_factor));
 
-        let hbar = fields.params.hbar_eff;
+        let ell = fields.params.smoothing_length;
         let mass = fields.params.mass_alpha;
         let density_mean = cosmology.density_matter();
 
         // 1. Kinetic half-step in Fourier space.
-        kinetic_step(psi, &fields.grid, hbar, mass, dt / 2.0);
+        kinetic_step(psi, &fields.grid, ell, mass, dt / 2.0);
 
         // 2. Potential full step in real space.
-        potential_step(
-            psi,
-            &fields.grid,
-            hbar,
-            mass,
-            density_mean,
-            scale_factor,
-            dt,
-        );
+        potential_step(psi, &fields.grid, ell, mass, density_mean, scale_factor, dt);
 
         // 3. Kinetic half-step in Fourier space.
-        kinetic_step(psi, &fields.grid, hbar, mass, dt / 2.0);
+        kinetic_step(psi, &fields.grid, ell, mass, dt / 2.0);
 
         Ok(())
     }
@@ -88,11 +80,11 @@ impl Dynamics for SchrodingerPoissonDynamics {
 
 /// Kinetic half-step: FFT psi, rotate by exp(I * theta(k)), IFFT.
 ///
-/// theta(k) = -hbar |k|^2 dt / (2m)
+/// theta(k) = -ell |k|^2 dt / (2m)
 fn kinetic_step(
     psi: &mut morphis::even_field::EvenField<3>,
     grid: &morphis::grid::Grid<3>,
-    hbar: f64,
+    ell: f64,
     mass: f64,
     dt: f64,
 ) {
@@ -115,7 +107,7 @@ fn kinetic_step(
                 let kz = grid.wavenumber(m2);
                 let k2 = kx * kx + ky * ky + kz * kz;
 
-                let theta = -hbar * k2 * dt / (2.0 * mass);
+                let theta = -ell * k2 * dt / (2.0 * mass);
                 let cos_t = theta.cos();
                 let sin_t = theta.sin();
 
@@ -138,7 +130,7 @@ fn kinetic_step(
 fn potential_step(
     psi: &mut morphis::even_field::EvenField<3>,
     grid: &morphis::grid::Grid<3>,
-    hbar: f64,
+    ell: f64,
     mass: f64,
     density_mean: f64,
     scale_factor: f64,
@@ -159,8 +151,8 @@ fn potential_step(
     let source = &overdensity * prefactor;
     let phi = source.laplacian_inverse();
 
-    // Phase rotation: theta = -m * Phi * dt / hbar
-    let angle = &phi * (-mass * dt / hbar);
+    // Phase rotation: theta = -m * Phi * dt / ell
+    let angle = &phi * (-mass * dt / ell);
     *psi = psi.rotate_phase(&angle);
 }
 

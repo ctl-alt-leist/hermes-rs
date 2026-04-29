@@ -1,7 +1,7 @@
 //! Fuzzy dark matter initial conditions.
 //!
 //! Initializes a Gaussian wavepacket in the even subalgebra:
-//! psi(x) = sqrt(rho(x) / m) * exp(I * S(x) / hbar)
+//! psi(x) = sqrt(rho(x) / m) * exp(I * S(x) / ell)
 //!
 //! The density profile is a Gaussian centered in the box, and the
 //! phase S encodes zero initial velocity (stationary soliton-like IC).
