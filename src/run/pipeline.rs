@@ -264,10 +264,18 @@ pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFr
                 };
             }
 
-            // Sample one point per grid cell, positioned at cell center.
-            // Brightness from log-scaled density. Only show cells above
-            // a threshold to avoid filling the view with dim background.
-            let cell_size = 1.0 / n as f32;
+            // Density-weighted random sampling: draw points with probability
+            // proportional to density. Dense regions get many points,
+            // empty regions get none. Positions randomized within each cell
+            // to avoid grid artifacts.
+            use rand::Rng;
+            use rand::SeedableRng;
+            use rand_chacha::ChaCha20Rng;
+
+            let cell_size = 1.0 / n as f64;
+            let total_density: f64 = density.iter().sum();
+            let n_sample_points = 30_000; // target point count
+
             let density_max = density.iter().copied().fold(0.0_f64, f64::max);
             let density_min = density
                 .iter()
@@ -278,37 +286,46 @@ pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFr
             let log_max = density_max.max(1e-30).ln();
             let log_range = (log_max - log_min).max(1e-10);
 
-            // Show all cells above 1% of peak density.
-            let threshold = density_max * 0.01;
+            let mut out_positions = Vec::with_capacity(n_sample_points);
+            let mut out_colors = Vec::with_capacity(n_sample_points);
 
-            let mut out_positions = Vec::new();
-            let mut out_colors = Vec::new();
+            // Use step as seed so each frame has different sampling noise.
+            let mut rng = ChaCha20Rng::seed_from_u64(snapshot.step as u64);
 
-            for m0 in 0..n {
-                for m1 in 0..n {
-                    for m2 in 0..n {
-                        let flat_index = m0 * n * n + m1 * n + m2;
-                        if flat_index >= density.len() {
-                            continue;
-                        }
+            for _ in 0..n_sample_points {
+                // Pick a random cell weighted by density.
+                let target = rng.random_range(0.0..total_density);
+                let mut cumulative = 0.0;
+                let mut chosen = 0_usize;
 
-                        let rho = density[flat_index];
-                        if rho < threshold {
-                            continue;
-                        }
-
-                        let x = (m0 as f32 + 0.5) * cell_size - 0.5;
-                        let y = (m1 as f32 + 0.5) * cell_size - 0.5;
-                        let z = (m2 as f32 + 0.5) * cell_size - 0.5;
-
-                        out_positions.push([x, y, z]);
-
-                        let log_rho = rho.max(1e-30).ln();
-                        let normalized = ((log_rho - log_min) / log_range).clamp(0.0, 1.0);
-                        let brightness = normalized * normalized;
-                        out_colors.push(colormap_hot(brightness));
+                for (flat_idx, &rho) in density.iter().enumerate() {
+                    cumulative += rho;
+                    if cumulative >= target {
+                        chosen = flat_idx;
+                        break;
                     }
                 }
+
+                let m0 = chosen / (n * n);
+                let m1 = (chosen / n) % n;
+                let m2 = chosen % n;
+
+                // Random position within the cell.
+                let jitter_x: f64 = rng.random_range(0.0..1.0);
+                let jitter_y: f64 = rng.random_range(0.0..1.0);
+                let jitter_z: f64 = rng.random_range(0.0..1.0);
+
+                let x = ((m0 as f64 + jitter_x) * cell_size - 0.5) as f32;
+                let y = ((m1 as f64 + jitter_y) * cell_size - 0.5) as f32;
+                let z = ((m2 as f64 + jitter_z) * cell_size - 0.5) as f32;
+
+                out_positions.push([x, y, z]);
+
+                let rho = density[chosen];
+                let log_rho = rho.max(1e-30).ln();
+                let normalized = ((log_rho - log_min) / log_range).clamp(0.0, 1.0);
+                let brightness = normalized * normalized;
+                out_colors.push(colormap_hot(brightness));
             }
 
             DisplayFrame {
