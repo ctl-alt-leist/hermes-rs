@@ -217,41 +217,106 @@ pub fn spawn_precompute(
 
 /// Convert a snapshot to a display-ready frame.
 ///
-/// Sequential for typical particle counts. Rayon overhead hurts at <100K
-/// particles — the thread pool scheduling costs more than the work.
+/// Dispatches on content type: particles use velocity colormap,
+/// fields sample density at grid points with brightness colormap.
 pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFrame {
+    use crate::io::snapshot::SnapshotContent;
+
     let scale = 1.0 / box_length as f32;
-    let n = snapshot.particle_count();
 
-    let speeds: Vec<f64> = snapshot
-        .momenta()
-        .unwrap()
-        .iter()
-        .map(|mom| mom.norm())
-        .collect();
+    match &snapshot.content {
+        SnapshotContent::Particles {
+            positions, momenta, ..
+        } => {
+            let speeds: Vec<f64> = momenta.iter().map(|mom| mom.norm()).collect();
+            let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
+            let speed_min = speeds.iter().copied().fold(f64::MAX, f64::min);
+            let speed_range = (speed_max - speed_min).max(1e-30);
 
-    let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
-    let speed_min = speeds.iter().copied().fold(f64::MAX, f64::min);
-    let speed_range = (speed_max - speed_min).max(1e-30);
+            let mut out_positions = Vec::with_capacity(positions.len());
+            let mut out_colors = Vec::with_capacity(positions.len());
 
-    let mut positions = Vec::with_capacity(n);
-    let mut colors = Vec::with_capacity(n);
+            for (pos, &speed) in positions.iter().zip(speeds.iter()) {
+                out_positions.push([
+                    pos.component(&[0]) as f32 * scale - 0.5,
+                    pos.component(&[1]) as f32 * scale - 0.5,
+                    pos.component(&[2]) as f32 * scale - 0.5,
+                ]);
+                let normalized = ((speed - speed_min) / speed_range).clamp(0.0, 1.0);
+                out_colors.push(colormap_hot(normalized));
+            }
 
-    for (pos, &speed) in snapshot.positions().unwrap().iter().zip(speeds.iter()) {
-        positions.push([
-            pos.component(&[0]) as f32 * scale - 0.5,
-            pos.component(&[1]) as f32 * scale - 0.5,
-            pos.component(&[2]) as f32 * scale - 0.5,
-        ]);
-        let normalized = ((speed - speed_min) / speed_range).clamp(0.0, 1.0);
-        colors.push(colormap_hot(normalized));
-    }
+            DisplayFrame {
+                positions: out_positions,
+                colors: out_colors,
+                step: snapshot.step,
+                scale_factor: snapshot.scale_factor,
+            }
+        }
+        SnapshotContent::Fields { density, n_cells } => {
+            let n = *n_cells;
+            if n == 0 || density.is_empty() {
+                return DisplayFrame {
+                    positions: Vec::new(),
+                    colors: Vec::new(),
+                    step: snapshot.step,
+                    scale_factor: snapshot.scale_factor,
+                };
+            }
 
-    DisplayFrame {
-        positions,
-        colors,
-        step: snapshot.step,
-        scale_factor: snapshot.scale_factor,
+            // Sample one point per grid cell, positioned at cell center.
+            // Brightness from log-scaled density. Only show cells above
+            // a threshold to avoid filling the view with dim background.
+            let cell_size = 1.0 / n as f32;
+            let density_max = density.iter().copied().fold(0.0_f64, f64::max);
+            let density_min = density
+                .iter()
+                .copied()
+                .filter(|&d| d > 0.0)
+                .fold(f64::MAX, f64::min);
+            let log_min = density_min.max(1e-30).ln();
+            let log_max = density_max.max(1e-30).ln();
+            let log_range = (log_max - log_min).max(1e-10);
+
+            // Threshold: only show top 30% of density range.
+            let threshold = (log_min + 0.7 * log_range).exp();
+
+            let mut out_positions = Vec::new();
+            let mut out_colors = Vec::new();
+
+            for m0 in 0..n {
+                for m1 in 0..n {
+                    for m2 in 0..n {
+                        let flat_index = m0 * n * n + m1 * n + m2;
+                        if flat_index >= density.len() {
+                            continue;
+                        }
+
+                        let rho = density[flat_index];
+                        if rho < threshold {
+                            continue;
+                        }
+
+                        let x = (m0 as f32 + 0.5) * cell_size - 0.5;
+                        let y = (m1 as f32 + 0.5) * cell_size - 0.5;
+                        let z = (m2 as f32 + 0.5) * cell_size - 0.5;
+
+                        out_positions.push([x, y, z]);
+
+                        let log_rho = rho.max(1e-30).ln();
+                        let normalized = ((log_rho - log_min) / log_range).clamp(0.0, 1.0);
+                        out_colors.push(colormap_hot(normalized));
+                    }
+                }
+            }
+
+            DisplayFrame {
+                positions: out_positions,
+                colors: out_colors,
+                step: snapshot.step,
+                scale_factor: snapshot.scale_factor,
+            }
+        }
     }
 }
 
@@ -328,12 +393,7 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
 
     // Estimate box length from first snapshot.
     let first = load_snapshot(&snapshot_paths[0])?;
-    let box_length = first
-        .positions
-        .iter()
-        .flat_map(|pos: &morphis::vector::Vector<3>| (0..3).map(move |d| pos.component(&[d]).abs()))
-        .fold(0.0_f64, f64::max)
-        * 1.1;
+    let box_length = estimate_box_length(&first);
 
     // Loader thread: load + precompute frames, send via channel.
     let (frame_tx, frame_rx) = playback_mpsc::sync_channel::<ViewerMessage>(32);
@@ -460,4 +520,30 @@ pub fn find_snapshot_paths(dir: &str) -> Vec<std::path::PathBuf> {
 /// Count snapshot files in a directory.
 pub fn count_snapshots(dir: &str) -> usize {
     find_snapshot_paths(dir).len()
+}
+
+#[cfg(feature = "vis")]
+/// Estimate the box length from a snapshot.
+///
+/// For particles: maximum coordinate extent.
+/// For fields: uses n_cells as a proxy (assumes unit box, scale = 1).
+fn estimate_box_length(snapshot: &crate::io::snapshot::Snapshot) -> f64 {
+    use crate::io::snapshot::SnapshotContent;
+
+    match &snapshot.content {
+        SnapshotContent::Particles { positions, .. } => {
+            positions
+                .iter()
+                .flat_map(|pos: &morphis::vector::Vector<3>| {
+                    (0..3).map(move |d| pos.component(&[d]).abs())
+                })
+                .fold(0.0_f64, f64::max)
+                * 1.1
+        }
+        SnapshotContent::Fields { n_cells, .. } => {
+            // Field snapshots don't carry the box length explicitly.
+            // Use 1.0 as the normalized box — the precompute maps to [-0.5, 0.5].
+            *n_cells as f64
+        }
+    }
 }
