@@ -41,16 +41,26 @@ impl Scene for FuzzyDM {
         let morphis_grid =
             MorphisGrid::<3>::new(config.simulation.n_cells, config.simulation.box_length);
 
-        // Parameters tuned for gravity-dispersion balance at the box
-        // fundamental mode. ell/m ~ 480 gives dispersive pressure
-        // comparable to gravitational collapse, with CFL ~ 0.65
-        // (stable for 300 steps over 20 Gyr).
+        // Calibrated so de Broglie wavelength at sigma_v ~ 300 km/s
+        // matches the cell size: ell/m = sigma_v * dx / (2 pi).
+        // sigma_v = 307 kpc/Gyr, dx = box_length / n_cells.
+        let dx = config.simulation.box_length / config.simulation.n_cells as f64;
+        let sigma_v = 307.0; // 300 km/s in kpc/Gyr
+        let ell_over_m = sigma_v * dx / (2.0 * std::f64::consts::PI);
+
         let params = FieldParams {
-            smoothing_length: 480.0,
+            smoothing_length: ell_over_m, // m_alpha = 1, so ell = ell/m
             mass_alpha: 1.0,
         };
 
-        let psi = init::gaussian_wavepacket(&hermes_grid, &params);
+        let cosmology_clone = _cosmology.clone();
+        let psi = init::zeldovich_wavefunction(
+            &hermes_grid,
+            &cosmology_clone,
+            &params,
+            config.time.scale_factor_initial,
+            _seed,
+        )?;
 
         let field_state = FieldState {
             grid: morphis_grid,
