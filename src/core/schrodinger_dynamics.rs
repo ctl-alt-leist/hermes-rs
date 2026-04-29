@@ -1,19 +1,32 @@
-//! Schrodinger-Poisson dynamics stub.
+//! Schrodinger-Poisson dynamics: split-step spectral integrator.
 //!
-//! Placeholder dynamics for the field-theoretic dark matter simulation.
-//! Currently a no-op — the wavefunction is not evolved. This validates
-//! that the Content::Fields path works through the full pipeline.
-//! The actual split-step integrator will be implemented here.
+//! Evolves a wavefunction psi in G^+ (even subalgebra) under
+//! self-gravity via the symmetric split-step method:
+//!
+//!   1. Kinetic half-step (Fourier space): phase rotation by -hbar |k|^2 dt / (2m)
+//!   2. Potential full step (real space): Poisson solve, phase rotation by -m Phi dt / hbar
+//!   3. Kinetic half-step (repeat step 1)
+//!
+//! The kinetic step uses FFT to transform the wavefunction components
+//! to Fourier space, applies the k-dependent phase rotation, and
+//! transforms back. The potential step uses morphis's laplacian_inverse
+//! for the Poisson solve.
+
+use std::f64::consts::PI;
+
+use morphis::field::Field;
+use morphis::metric;
+use ndarray::Array3;
+use ndrustfft::{FftHandler, R2cFftHandler, ndfft, ndfft_r2c, ndifft, ndifft_r2c};
+use num_complex::Complex64;
 
 use crate::core::content::Content;
 use crate::core::dynamics::Dynamics;
 use crate::error::HermesError;
+use crate::physics::constants::G as GRAV;
 use crate::physics::cosmology::Cosmology;
 
 /// Schrodinger-Poisson dynamics for wavefunction dark matter.
-///
-/// Will implement symmetric split-step: kinetic/2 -> potential -> kinetic/2.
-/// Currently a no-op stub.
 pub struct SchrodingerPoissonDynamics;
 
 impl SchrodingerPoissonDynamics {
@@ -31,13 +44,172 @@ impl Default for SchrodingerPoissonDynamics {
 impl Dynamics for SchrodingerPoissonDynamics {
     fn step(
         &mut self,
-        _content: &mut Content,
-        _cosmology: &Cosmology,
-        _scale_factor_prev: f64,
-        _scale_factor_next: f64,
+        content: &mut Content,
+        cosmology: &Cosmology,
+        scale_factor_prev: f64,
+        scale_factor_next: f64,
     ) -> Result<(), HermesError> {
-        // Stub: no evolution. The wavefunction stays at its initial state.
-        // TODO: implement split-step kinetic/potential integration.
+        let fields = content.fields_mut().ok_or_else(|| {
+            HermesError::Config("Schrodinger dynamics requires field content".to_string())
+        })?;
+
+        let psi = fields.psi.as_mut().ok_or_else(|| {
+            HermesError::Config("Schrodinger dynamics requires psi wavefunction".to_string())
+        })?;
+
+        let scale_factor = (scale_factor_prev + scale_factor_next) / 2.0;
+        let dt = (scale_factor_next - scale_factor_prev)
+            / (scale_factor * cosmology.hubble_parameter(scale_factor));
+
+        let hbar = fields.params.hbar_eff;
+        let mass = fields.params.mass_alpha;
+        let density_mean = cosmology.density_matter();
+
+        // 1. Kinetic half-step in Fourier space.
+        kinetic_step(psi, &fields.grid, hbar, mass, dt / 2.0);
+
+        // 2. Potential full step in real space.
+        potential_step(
+            psi,
+            &fields.grid,
+            hbar,
+            mass,
+            density_mean,
+            scale_factor,
+            dt,
+        );
+
+        // 3. Kinetic half-step in Fourier space.
+        kinetic_step(psi, &fields.grid, hbar, mass, dt / 2.0);
+
         Ok(())
     }
+}
+
+/// Kinetic half-step: FFT psi, rotate by exp(I * theta(k)), IFFT.
+///
+/// theta(k) = -hbar |k|^2 dt / (2m)
+fn kinetic_step(
+    psi: &mut morphis::even_field::EvenField<3>,
+    grid: &morphis::grid::Grid<3>,
+    hbar: f64,
+    mass: f64,
+    dt: f64,
+) {
+    let n = grid.n_cells;
+    let n_complex = n / 2 + 1;
+
+    // FFT both components to Fourier space.
+    let scalar_hat = fft_3d(&psi.scalar, n);
+    let pseudo_hat = fft_3d(&psi.pseudoscalar, n);
+
+    // Apply phase rotation in k-space: (a + bI) * (cos theta + sin theta I)
+    let mut result_scalar_hat = Array3::<Complex64>::zeros((n, n, n_complex));
+    let mut result_pseudo_hat = Array3::<Complex64>::zeros((n, n, n_complex));
+
+    for m0 in 0..n {
+        let kx = grid.wavenumber(m0);
+        for m1 in 0..n {
+            let ky = grid.wavenumber(m1);
+            for m2 in 0..n_complex {
+                let kz = grid.wavenumber(m2);
+                let k2 = kx * kx + ky * ky + kz * kz;
+
+                let theta = -hbar * k2 * dt / (2.0 * mass);
+                let cos_t = theta.cos();
+                let sin_t = theta.sin();
+
+                let a = scalar_hat[[m0, m1, m2]];
+                let b = pseudo_hat[[m0, m1, m2]];
+
+                // (a + bI)(cos + sin I) = (a cos - b sin) + (a sin + b cos) I
+                result_scalar_hat[[m0, m1, m2]] = a * cos_t - b * sin_t;
+                result_pseudo_hat[[m0, m1, m2]] = a * sin_t + b * cos_t;
+            }
+        }
+    }
+
+    // IFFT back to real space.
+    psi.scalar = ifft_3d(&result_scalar_hat, n);
+    psi.pseudoscalar = ifft_3d(&result_pseudo_hat, n);
+}
+
+/// Potential full step: compute density, Poisson solve, phase rotation.
+fn potential_step(
+    psi: &mut morphis::even_field::EvenField<3>,
+    grid: &morphis::grid::Grid<3>,
+    hbar: f64,
+    mass: f64,
+    density_mean: f64,
+    scale_factor: f64,
+    dt: f64,
+) {
+    // Density: rho = m * (a^2 + b^2)
+    let rho = psi.density(mass);
+
+    // Overdensity: delta = rho / rho_bar - 1
+    let mut overdensity = &rho * (1.0 / density_mean);
+    // Subtract 1 pointwise.
+    let _n = grid.n_cells;
+    let ones = Field::scalar_field(grid, metric::euclidean::<3>(), |_| 1.0);
+    overdensity = &overdensity - &ones;
+
+    // Poisson solve: Phi = (4 pi G rho_bar a^2 * delta).laplacian_inverse()
+    let prefactor = 4.0 * PI * GRAV * density_mean * scale_factor * scale_factor;
+    let source = &overdensity * prefactor;
+    let phi = source.laplacian_inverse();
+
+    // Phase rotation: theta = -m * Phi * dt / hbar
+    let angle = &phi * (-mass * dt / hbar);
+    *psi = psi.rotate_phase(&angle);
+}
+
+// ============================================================================
+// FFT helpers for EvenField components
+// ============================================================================
+
+/// Forward 3D R2C FFT on an ndarray.
+fn fft_3d(data: &ndarray::ArrayD<f64>, n: usize) -> Array3<Complex64> {
+    let n_complex = n / 2 + 1;
+
+    // Reshape to Array3 for ndrustfft.
+    let data_3d = data
+        .view()
+        .into_shape_with_order((n, n, n))
+        .expect("data shape mismatch");
+
+    let handler_r2c = R2cFftHandler::new(n);
+    let handler_c2c_1 = FftHandler::new(n);
+    let handler_c2c_0 = FftHandler::new(n);
+
+    let mut complex = Array3::<Complex64>::zeros((n, n, n_complex));
+    ndfft_r2c(&data_3d, &mut complex, &handler_r2c, 2);
+
+    let mut scratch = complex.clone();
+    ndfft(&complex, &mut scratch, &handler_c2c_1, 1);
+    complex.assign(&scratch);
+    ndfft(&complex, &mut scratch, &handler_c2c_0, 0);
+    complex.assign(&scratch);
+
+    complex
+}
+
+/// Inverse 3D C2R FFT, returning an ndarray::ArrayD.
+fn ifft_3d(complex: &Array3<Complex64>, n: usize) -> ndarray::ArrayD<f64> {
+    let handler_c2c_0 = FftHandler::new(n);
+    let handler_c2c_1 = FftHandler::new(n);
+    let handler_r2c = R2cFftHandler::new(n);
+
+    let mut work = complex.clone();
+    let mut scratch = work.clone();
+
+    ndifft(&work, &mut scratch, &handler_c2c_0, 0);
+    work.assign(&scratch);
+    ndifft(&work, &mut scratch, &handler_c2c_1, 1);
+    work.assign(&scratch);
+
+    let mut real = Array3::<f64>::zeros((n, n, n));
+    ndifft_r2c(&work, &mut real, &handler_r2c, 2);
+
+    real.into_dyn()
 }
