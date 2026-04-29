@@ -1,11 +1,14 @@
 pub mod cic;
 pub mod constants;
+pub mod content;
 pub mod cosmology;
 pub mod diagnostics;
+pub mod dynamics;
 pub mod field;
 pub mod grid;
 pub mod initial;
 pub mod integrator;
 pub mod particles;
+pub mod pm_dynamics;
 pub mod poisson;
 pub mod simulation;

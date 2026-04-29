@@ -1,23 +1,19 @@
-//! Galaxy group scene: constrained Zel'dovich in a smaller periodic box.
-//!
-//! A ~3 Mpc periodic box focused on the formation of a galaxy group.
-//! Uses the same Zel'dovich approximation as the cosmic web, but with
-//! a smaller box, later start redshift, and an initial long-wavelength
-//! overdensity bias that ensures the region collapses into a group-mass
-//! structure by z = 0.
+//! Galaxy group scene: multiple colliding NFW halos.
 
 pub mod init;
 
 use crate::config::Configuration;
 use crate::error::HermesError;
+use crate::physics::content::Content;
 use crate::physics::cosmology::Cosmology;
+use crate::physics::dynamics::Dynamics;
 use crate::physics::grid::Grid;
-use crate::physics::particles::Particles;
+use crate::physics::pm_dynamics::ParticleMeshDynamics;
 use crate::scenes::Scene;
 
 const SCENE_DEFAULTS: &str = include_str!("defaults.toml");
 
-/// Galaxy group formation in a smaller periodic box.
+/// Galaxy group formation: colliding NFW halos.
 pub struct GalaxyGroup;
 
 impl Scene for GalaxyGroup {
@@ -35,23 +31,27 @@ impl Scene for GalaxyGroup {
                 "galaxy-group scene expects box_length <= 10 Mpc (10000 kpc)".to_string(),
             ));
         }
-
         Ok(())
     }
 
-    fn initialize_particles(
+    fn initialize(
         &self,
-        grid: &Grid,
-        cosmology: &Cosmology,
         config: &Configuration,
+        cosmology: &Cosmology,
         seed: u64,
-    ) -> Result<Particles, HermesError> {
-        init::colliding_halos_init(
+    ) -> Result<(Content, Box<dyn Dynamics>), HermesError> {
+        let grid = Grid::new(config.simulation.n_cells, config.simulation.box_length);
+
+        let particles = init::colliding_halos_init(
             config.simulation.n_particles,
-            grid,
+            &grid,
             cosmology,
             config.time.scale_factor_initial,
             seed,
-        )
+        )?;
+
+        let dynamics = ParticleMeshDynamics::new(grid);
+
+        Ok((Content::Particles(particles), Box::new(dynamics)))
     }
 }

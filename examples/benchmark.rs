@@ -211,9 +211,9 @@ fn main() {
     let mut sim = Simulation::from_config(config, 42).unwrap();
     sim.run(&mut []).unwrap();
 
-    let velocity_max_final = (0..sim.particles.count())
+    let velocity_max_final = (0..sim.content.particles().unwrap().count())
         .map(|p| {
-            let mom = sim.particles.momentum_of(p);
+            let mom = sim.content.particles().unwrap().momentum_of(p);
             mom.norm() / (mass * 1.0 * 1.0)
         })
         .fold(0.0_f64, f64::max);
