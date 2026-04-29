@@ -10,9 +10,9 @@ clap = { version = "4", features = ["derive"] }
 image = "0.25"
 indicatif = "0.17"
 morphis = { git = "https://github.com/ctl-alt-leist/morphis-rs.git" }
-ndarray = "0.16"
+ndarray = "0.17"
 rayon = "1"
-ndrustfft = "0.5"
+ndrustfft = "0.6"
 num-complex = "0.4"
 rand = "0.9"
 rand_chacha = "0.9"
