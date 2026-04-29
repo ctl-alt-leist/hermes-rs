@@ -278,8 +278,8 @@ pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFr
             let log_max = density_max.max(1e-30).ln();
             let log_range = (log_max - log_min).max(1e-10);
 
-            // Threshold: only show top 30% of density range.
-            let threshold = (log_min + 0.7 * log_range).exp();
+            // Show all cells above 1% of peak density.
+            let threshold = density_max * 0.01;
 
             let mut out_positions = Vec::new();
             let mut out_colors = Vec::new();
@@ -305,7 +305,8 @@ pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFr
 
                         let log_rho = rho.max(1e-30).ln();
                         let normalized = ((log_rho - log_min) / log_range).clamp(0.0, 1.0);
-                        out_colors.push(colormap_hot(normalized));
+                        let brightness = normalized * normalized;
+                        out_colors.push(colormap_hot(brightness));
                     }
                 }
             }
@@ -339,7 +340,7 @@ pub fn run_viewer_main_thread(frame_rx: Receiver<ViewerMessage>) {
     let mut window = Window::new_with_size("hermes — live simulation", 1024, 768);
     window.set_background_color(0.0, 0.0, 0.0);
     window.set_light(Light::StickToCamera);
-    window.set_point_size(3.0);
+    window.set_point_size(5.0);
 
     // Camera at a 3/4 angle, zoomed out to see the full box.
     let eye = Point3::new(0.8, 0.6, 1.0);
@@ -460,7 +461,7 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
     let mut window = Window::new_with_size("hermes — playback", 1024, 768);
     window.set_background_color(0.0, 0.0, 0.0);
     window.set_light(Light::StickToCamera);
-    window.set_point_size(3.0);
+    window.set_point_size(5.0);
 
     // Camera at a 3/4 angle, zoomed out to see the full box.
     let eye = Point3::new(0.8, 0.6, 1.0);
