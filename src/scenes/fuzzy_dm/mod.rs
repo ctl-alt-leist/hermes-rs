@@ -48,9 +48,14 @@ impl Scene for FuzzyDM {
         let sigma_v = 307.0; // 300 km/s in kpc/Gyr
         let ell_over_m = sigma_v * dx / (2.0 * std::f64::consts::PI);
 
+        // In our units (kpc, Gyr, M_sun), the mass unit from the notes
+        // is 10^10 M_sun. With m_alpha = 1e10 M_sun:
+        //   ell = ell_over_m * m_alpha
+        let mass_alpha = 1e10;
+
         let params = FieldParams {
-            smoothing_length: ell_over_m, // m_alpha = 1, so ell = ell/m
-            mass_alpha: 1.0,
+            smoothing_length: ell_over_m * mass_alpha,
+            mass_alpha,
         };
 
         let cosmology_clone = _cosmology.clone();
