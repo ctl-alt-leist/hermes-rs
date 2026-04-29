@@ -310,60 +310,11 @@ pub fn save_snapshot(
 }
 
 /// Load a snapshot from a bincode file on disk.
-///
-/// Supports both the current enum-based format and the legacy flat format
-/// (pre-content-abstraction snapshots with bare positions/momenta fields).
 pub fn load_snapshot(path: &std::path::Path) -> Result<Snapshot, crate::error::HermesError> {
-    let bytes = std::fs::read(path)?;
+    let file = std::fs::File::open(path)?;
+    let disk: SnapshotOnDisk = bincode::deserialize_from(file).map_err(|e| {
+        crate::error::HermesError::Config(format!("bincode deserialize failed: {e}"))
+    })?;
 
-    // Try current format first.
-    if let Ok(disk) = bincode::deserialize::<SnapshotOnDisk>(&bytes) {
-        return Ok(Snapshot::from_disk(disk));
-    }
-
-    // Fall back to legacy format.
-    if let Ok(legacy) = bincode::deserialize::<LegacySnapshotOnDisk>(&bytes) {
-        return Ok(Snapshot::from_legacy(legacy));
-    }
-
-    Err(crate::error::HermesError::Config(format!(
-        "failed to deserialize snapshot: {}",
-        path.display()
-    )))
-}
-
-/// Legacy snapshot format (pre-content-abstraction).
-///
-/// Fields were stored flat, not inside an enum variant.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LegacySnapshotOnDisk {
-    step: usize,
-    scale_factor: f64,
-    positions: Vec<[f64; 3]>,
-    momenta: Vec<[f64; 3]>,
-    mass_particle: f64,
-    diagnostics: DiagnosticsSummary,
-}
-
-impl Snapshot {
-    fn from_legacy(legacy: LegacySnapshotOnDisk) -> Self {
-        Self {
-            step: legacy.step,
-            scale_factor: legacy.scale_factor,
-            content: SnapshotContent::Particles {
-                positions: legacy
-                    .positions
-                    .iter()
-                    .map(|c| vector_from_array(*c))
-                    .collect(),
-                momenta: legacy
-                    .momenta
-                    .iter()
-                    .map(|c| vector_from_array(*c))
-                    .collect(),
-                mass_particle: legacy.mass_particle,
-            },
-            diagnostics: legacy.diagnostics,
-        }
-    }
+    Ok(Snapshot::from_disk(disk))
 }
