@@ -44,13 +44,11 @@ impl Scene for FuzzyDM {
         // Calibrated so de Broglie wavelength at sigma_v ~ 300 km/s
         // matches the cell size: ell/m = sigma_v * dx / (2 pi).
         // sigma_v = 307 kpc/Gyr, dx = box_length / n_cells.
+        // Calibrated so de Broglie wavelength at the characteristic velocity
+        // matches the cell size: ell/m = sigma_v * dx / (2 pi).
         let dx = config.simulation.box_length / config.simulation.n_cells as f64;
         let sigma_v = 307.0; // 300 km/s in kpc/Gyr
         let ell_over_m = sigma_v * dx / (2.0 * std::f64::consts::PI);
-
-        // In our units (kpc, Gyr, M_sun), the mass unit from the notes
-        // is 10^10 M_sun. With m_alpha = 1e10 M_sun:
-        //   ell = ell_over_m * m_alpha
         let mass_alpha = 1e10;
 
         let params = FieldParams {
@@ -58,14 +56,7 @@ impl Scene for FuzzyDM {
             mass_alpha,
         };
 
-        let cosmology_clone = _cosmology.clone();
-        let psi = init::zeldovich_wavefunction(
-            &hermes_grid,
-            &cosmology_clone,
-            &params,
-            config.time.scale_factor_initial,
-            _seed,
-        )?;
+        let psi = init::nonlinear_modes(&hermes_grid, &params, _cosmology);
 
         let field_state = FieldState {
             grid: morphis_grid,

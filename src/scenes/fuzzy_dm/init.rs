@@ -6,6 +6,8 @@
 //!   alpha(x) = sqrt(rho(x) / m) * exp(I * m * v(x) . x / ell)
 
 use morphis::even_field::EvenField;
+use std::f64::consts::PI;
+
 use morphis::metric;
 use ndarray::Array3;
 use ndrustfft::{FftHandler, R2cFftHandler, ndfft, ndfft_r2c, ndifft, ndifft_r2c};
@@ -104,6 +106,15 @@ pub fn zeldovich_wavefunction(
     }
 
     // Compute overdensity: delta = -D+(a) * div(Psi).
+    //
+    // The linear Zel'dovich overdensity at z=49 is delta ~ 0.01 * sigma_8,
+    // which gives delta ~ 1e-6 at the grid scale. This is far too small
+    // for the Schrodinger-Poisson system to develop nonlinear structure
+    // in a reasonable number of steps. We boost the perturbation amplitude
+    // so delta_init ~ 0.1, equivalent to starting with already-nonlinear
+    // perturbations. This sacrifices the z=49 starting point in favor of
+    // visible dynamics.
+    let perturbation_boost = 50000.0;
     let mut div_psi = Array3::<f64>::zeros((n, n, n));
     #[allow(clippy::needless_range_loop)]
     for d in 0..3 {
@@ -140,7 +151,7 @@ pub fn zeldovich_wavefunction(
         let m1 = ((x[1] / cell_length) as usize).min(n - 1);
         let m2 = ((x[2] / cell_length) as usize).min(n - 1);
 
-        let delta = -growth * div_psi[[m0, m1, m2]];
+        let delta = -growth * perturbation_boost * div_psi[[m0, m1, m2]];
         let rho = density_mean * (1.0 + delta).max(1e-10);
 
         let vx = velocity_factor * displacement[0][[m0, m1, m2]];
@@ -188,4 +199,55 @@ fn ifft_3d(complex: &Array3<Complex64>, n: usize) -> Array3<f64> {
     let mut real = Array3::<f64>::zeros((n, n, n));
     ndifft_r2c(&work, &mut real, &handler_r2c, 2);
     real
+}
+
+/// Initialize with large-amplitude sinusoidal density modes.
+///
+/// Produces delta ~ 0.5-2.0 immediately, skipping the slow linear
+/// growth phase. The velocity is set proportional to the density
+/// gradient (as in Zel'dovich), scaled so the flow is dynamically
+/// active from the start.
+pub fn nonlinear_modes(
+    grid: &HermesGrid,
+    params: &FieldParams,
+    cosmology: &Cosmology,
+) -> EvenField<3> {
+    let n = grid.n_cells;
+    let box_length = grid.box_length;
+    let _cell_length = grid.cell_length;
+    let ell = params.smoothing_length;
+    let mass = params.mass_alpha;
+    let density_mean = cosmology.density_matter();
+
+    let morphis_grid = morphis::grid::Grid::<3>::new(n, box_length);
+    let g = metric::euclidean::<3>();
+
+    let k1 = 2.0 * PI / box_length;
+    let k2 = 2.0 * k1;
+    let k3 = 3.0 * k1;
+
+    EvenField::from_fn(&morphis_grid, g, |x| {
+        // Density: superposition of sinusoidal modes with large amplitude.
+        let delta = 0.5 * (k1 * x[0]).sin()
+            + 0.3 * (k2 * x[1]).sin()
+            + 0.2 * (k3 * x[2]).sin()
+            + 0.15 * (k1 * x[0] + k2 * x[1]).sin();
+
+        let rho = density_mean * (1.0 + delta).max(0.01);
+
+        // Velocity from density gradient (Zel'dovich-like).
+        // v ~ -H * f * Psi where Psi = -grad(delta) / k^2.
+        // For a simple scaling, use v proportional to grad(delta).
+        let hubble = 0.069; // H0 in Gyr^-1
+        let v_scale = hubble * box_length / (2.0 * PI); // ~ 100 kpc/Gyr
+
+        let vx = -v_scale * 0.5 * k1 * (k1 * x[0]).cos();
+        let vy = -v_scale * 0.3 * k2 * (k2 * x[1]).cos();
+        let vz = -v_scale * 0.2 * k3 * (k3 * x[2]).cos();
+
+        let phase = mass * (vx * x[0] + vy * x[1] + vz * x[2]) / ell;
+        let amplitude = (rho / mass).sqrt();
+
+        (amplitude * phase.cos(), amplitude * phase.sin())
+    })
 }

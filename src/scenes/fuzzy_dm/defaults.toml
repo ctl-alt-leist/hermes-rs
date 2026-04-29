@@ -13,13 +13,13 @@
 [simulation]
 n_cells      = 64
 n_particles  = 1     # not used for field content
-box_length   = 100000.0  # 100 Mpc in kpc
+box_length   = 10000.0   # 10 Mpc in kpc
 
 [time]
 scale_factor_initial = 0.02   # z ~ 49
 scale_factor_final   = 1.0    # z = 0
 n_steps              = 200
-stepping             = "log_a"
+stepping             = "linear_a"
 
 [output]
 snapshot_interval = 10
