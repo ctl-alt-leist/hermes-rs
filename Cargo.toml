@@ -3,6 +3,10 @@ name = "hermes-rs"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "hermes"
+path = "src/main.rs"
+
 [dependencies]
 bincode = "1"
 chrono = "0.4"

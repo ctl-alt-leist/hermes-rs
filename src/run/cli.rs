@@ -33,8 +33,8 @@ pub struct Cli {
     #[arg(long)]
     pub record: Option<String>,
 
-    /// Playback framerate in fps (default: 15).
-    #[arg(long, default_value = "15")]
+    /// Playback framerate in fps.
+    #[arg(long, default_value = "30")]
     pub fps: u64,
 
     /// RNG seed.
