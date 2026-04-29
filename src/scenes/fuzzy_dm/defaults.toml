@@ -1,0 +1,16 @@
+# Fuzzy dark matter scene defaults.
+# Single wavefunction in a periodic box, evolved by Schrodinger-Poisson.
+
+[simulation]
+n_cells      = 64
+n_particles  = 1     # not used for field content, but config requires it
+box_length   = 1000.0  # 1 Mpc in kpc
+
+[time]
+scale_factor_initial = 1.0
+scale_factor_final   = 1.1
+n_steps              = 100
+stepping             = "linear_a"
+
+[output]
+snapshot_interval = 10
