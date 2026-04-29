@@ -41,9 +41,12 @@ impl Scene for FuzzyDM {
         let morphis_grid =
             MorphisGrid::<3>::new(config.simulation.n_cells, config.simulation.box_length);
 
+        // smoothing_length ~ 100 kpc gives ~10 coherence lengths in the
+        // 1 Mpc box. mass_alpha sets the density scale — use cosmological
+        // mean density.
         let params = FieldParams {
-            smoothing_length: 1.0,
-            mass_alpha: 1.0,
+            smoothing_length: 100.0,
+            mass_alpha: 1e-6,
         };
 
         let psi = init::gaussian_wavepacket(&hermes_grid, &params);

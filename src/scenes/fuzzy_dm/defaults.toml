@@ -1,5 +1,9 @@
 # Fuzzy dark matter scene defaults.
 # Single wavefunction in a periodic box, evolved by Schrodinger-Poisson.
+#
+# The smoothing length (ell) controls the coherence scale. With
+# ell ~ 100 kpc in a 1 Mpc box, the wavefunction has ~10 coherence
+# lengths across the box, producing visible wave interference.
 
 [simulation]
 n_cells      = 64
@@ -8,8 +12,8 @@ box_length   = 1000.0  # 1 Mpc in kpc
 
 [time]
 scale_factor_initial = 1.0
-scale_factor_final   = 1.1
-n_steps              = 100
+scale_factor_final   = 3.0    # ~20 Gyr forward
+n_steps              = 300
 stepping             = "linear_a"
 
 [output]
