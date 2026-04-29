@@ -84,9 +84,9 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
 
     let sim_handle = thread::Builder::new()
         .name("simulation".to_string())
-        .spawn(move || -> Result<crate::physics::simulation::Simulation, HermesError> {
+        .spawn(move || -> Result<crate::core::simulation::Simulation, HermesError> {
             let scene = scene_by_name(&scene_name)?;
-            let mut sim = crate::physics::simulation::Simulation::from_scene(&*scene, config, seed)?;
+            let mut sim = crate::core::simulation::Simulation::from_scene(&*scene, config, seed)?;
 
             if !quiet {
                 use indicatif::{ProgressBar, ProgressStyle};
@@ -204,8 +204,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
         .name("simulation".to_string())
         .spawn(move || -> Result<(), HermesError> {
             let scene = scene_by_name(&scene_name)?;
-            let mut sim =
-                crate::physics::simulation::Simulation::from_scene(&*scene, config, seed)?;
+            let mut sim = crate::core::simulation::Simulation::from_scene(&*scene, config, seed)?;
             sim.run_into_pipeline(&sender, |_, _| {})?;
 
             Ok(())

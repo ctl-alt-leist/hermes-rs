@@ -9,12 +9,12 @@
 use std::time::Instant;
 
 use hermes_rs::config::build_configuration;
+use hermes_rs::core::simulation::Simulation;
 use hermes_rs::physics::cosmology::planck_2018;
 use hermes_rs::physics::grid::Grid;
 use hermes_rs::physics::initial::zeldovich_init;
 use hermes_rs::physics::integrator::{midpoint, step_kdk};
 use hermes_rs::physics::poisson::PoissonSolver;
-use hermes_rs::physics::simulation::Simulation;
 
 fn main() {
     println!("Hermes Benchmark");

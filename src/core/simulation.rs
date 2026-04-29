@@ -7,13 +7,13 @@
 //! it's running.
 
 use crate::config::Configuration;
+use crate::core::content::Content;
+use crate::core::dynamics::Dynamics;
 use crate::error::HermesError;
 use crate::io::observer::Observer;
 use crate::io::snapshot::Snapshot;
-use crate::physics::content::Content;
 use crate::physics::cosmology::Cosmology;
 use crate::physics::diagnostics::Diagnostics;
-use crate::physics::dynamics::Dynamics;
 use crate::physics::integrator::scale_factor_schedule;
 
 /// Complete state of a simulation.

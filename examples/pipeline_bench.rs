@@ -8,9 +8,9 @@ use std::sync::mpsc;
 use std::time::Instant;
 
 use hermes_rs::config::build_configuration;
+use hermes_rs::core::simulation::Simulation;
 use hermes_rs::io::observer::{FileObserver, NullObserver, Observer};
 use hermes_rs::io::snapshot::Snapshot;
-use hermes_rs::physics::simulation::Simulation;
 use hermes_rs::run::pipeline::{PipelineMessage, SnapshotSender, spawn_disk_writer, spawn_router};
 
 fn config(particles: usize, steps: usize) -> hermes_rs::config::Configuration {

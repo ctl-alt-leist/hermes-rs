@@ -9,10 +9,10 @@ pub mod cosmic_web;
 pub mod galaxy_group;
 
 use crate::config::Configuration;
+use crate::core::content::Content;
+use crate::core::dynamics::Dynamics;
 use crate::error::HermesError;
-use crate::physics::content::Content;
 use crate::physics::cosmology::Cosmology;
-use crate::physics::dynamics::Dynamics;
 
 /// Trait for simulation scenarios.
 ///

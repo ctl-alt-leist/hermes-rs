@@ -5,8 +5,8 @@
 //! particles use KDK leapfrog, fields use split-step, mixed content
 //! couples both through a shared Poisson solve.
 
+use crate::core::content::Content;
 use crate::error::HermesError;
-use crate::physics::content::Content;
 use crate::physics::cosmology::Cosmology;
 
 /// A dynamics module that advances content by one step.

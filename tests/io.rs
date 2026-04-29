@@ -186,7 +186,7 @@ fn file_observer_files_are_loadable() {
 #[test]
 fn simulation_with_memory_observer() {
     use hermes_rs::config::build_configuration;
-    use hermes_rs::physics::simulation::Simulation;
+    use hermes_rs::core::simulation::Simulation;
 
     let overrides: toml::Value = toml::from_str(
         r#"

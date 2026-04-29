@@ -3,10 +3,10 @@
 //! Wraps the existing integrator and Poisson solver into a `Dynamics`
 //! implementation for particle content.
 
+use crate::core::content::Content;
+use crate::core::dynamics::Dynamics;
 use crate::error::HermesError;
-use crate::physics::content::Content;
 use crate::physics::cosmology::Cosmology;
-use crate::physics::dynamics::Dynamics;
 use crate::physics::grid::Grid;
 use crate::physics::integrator::{midpoint, step_kdk};
 use crate::physics::poisson::PoissonSolver;

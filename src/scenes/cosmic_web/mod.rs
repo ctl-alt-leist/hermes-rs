@@ -3,12 +3,12 @@
 pub mod init;
 
 use crate::config::Configuration;
+use crate::core::content::Content;
+use crate::core::dynamics::Dynamics;
+use crate::core::pm_dynamics::ParticleMeshDynamics;
 use crate::error::HermesError;
-use crate::physics::content::Content;
 use crate::physics::cosmology::Cosmology;
-use crate::physics::dynamics::Dynamics;
 use crate::physics::grid::Grid;
-use crate::physics::pm_dynamics::ParticleMeshDynamics;
 use crate::scenes::Scene;
 
 const SCENE_DEFAULTS: &str = include_str!("defaults.toml");
