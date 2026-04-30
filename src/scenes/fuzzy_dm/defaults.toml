@@ -1,25 +1,11 @@
-# Fuzzy dark matter scene defaults.
-# Wavefunction dark matter in a cosmological box, Zel'dovich ICs at z=49.
-#
-# Parameters calibrated so the de Broglie wavelength at sigma_v ~ 300 km/s
-# matches the cell size: ell/m = sigma_v * dx / (2 pi).
-#
-# At 100 Mpc with 64 cells: dx = 1.5625 Mpc,
-# sigma_v = 300 km/s = 0.307 Mpc/Gyr,
-# ell/m = 0.307 * 1.5625 / (2 pi) = 0.076 Mpc^2/Gyr.
-#
-# Timestep ~ 0.1 Gyr (CFL: ell * k_max^2 / (2m) * dt < 1).
+# Fuzzy dark matter: wavefunction + self-gravity in a 10 Mpc box.
 
 [simulation]
-n_cells      = 64
-n_particles  = 1     # not used for field content
-box_length   = 10000.0   # 10 Mpc in kpc
+n_grid       = 64
+n_particles  = 1          # not used for field content
+box_length   = 10000.0    # 10 Mpc in kpc
 
 [time]
-scale_factor_initial = 0.02   # z ~ 49
-scale_factor_final   = 1.0    # z = 0
-n_steps              = 200
+scale_factor_initial = 0.0909  # z ~ 10
+scale_factor_final   = 1.0     # z = 0
 stepping             = "linear_a"
-
-[output]
-snapshot_interval = 10

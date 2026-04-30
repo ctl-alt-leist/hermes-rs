@@ -66,13 +66,13 @@ impl Dynamics for SchrodingerPoissonDynamics {
         let density_mean = cosmology.density_matter();
 
         // 1. Kinetic half-step in Fourier space.
-        kinetic_step(psi, &fields.grid, ell, mass, dt / 2.0);
+        kinetic_step(psi, &fields.grid, ell, mass, scale_factor, dt / 2.0);
 
         // 2. Potential full step in real space.
         potential_step(psi, &fields.grid, ell, mass, density_mean, scale_factor, dt);
 
         // 3. Kinetic half-step in Fourier space.
-        kinetic_step(psi, &fields.grid, ell, mass, dt / 2.0);
+        kinetic_step(psi, &fields.grid, ell, mass, scale_factor, dt / 2.0);
 
         Ok(())
     }
@@ -80,12 +80,13 @@ impl Dynamics for SchrodingerPoissonDynamics {
 
 /// Kinetic half-step: FFT psi, rotate by exp(I * theta(k)), IFFT.
 ///
-/// theta(k) = -ell |k|^2 dt / (2m)
-fn kinetic_step(
+/// theta(k) = -ell |k|^2 dt / (2m a^2)
+pub fn kinetic_step(
     psi: &mut morphis::even_field::EvenField<3>,
     grid: &morphis::grid::Grid<3>,
     ell: f64,
     mass: f64,
+    scale_factor: f64,
     dt: f64,
 ) {
     let n = grid.n_cells;
@@ -107,7 +108,7 @@ fn kinetic_step(
                 let kz = grid.wavenumber(m2);
                 let k2 = kx * kx + ky * ky + kz * kz;
 
-                let theta = -ell * k2 * dt / (2.0 * mass);
+                let theta = -ell * k2 * dt / (2.0 * mass * scale_factor * scale_factor);
                 let cos_t = theta.cos();
                 let sin_t = theta.sin();
 
@@ -127,7 +128,7 @@ fn kinetic_step(
 }
 
 /// Potential full step: compute density, Poisson solve, phase rotation.
-fn potential_step(
+pub fn potential_step(
     psi: &mut morphis::even_field::EvenField<3>,
     grid: &morphis::grid::Grid<3>,
     ell: f64,
@@ -157,11 +158,84 @@ fn potential_step(
 }
 
 // ============================================================================
+// Madelung velocity extraction
+// ============================================================================
+
+/// Extract the velocity field from a wavefunction via the wavefunction-gradient form.
+///
+/// Computes v_d = (ℓ / (m |α|²)) Im(ᾱ ∇_d α) for each spatial direction,
+/// where ᾱ is the even-subalgebra conjugate (s - pI) and ∇_d α is
+/// the spectral gradient along direction d.
+///
+/// This avoids the phase branch cut that makes the naive
+/// v = (ℓ/m) ∇ arg(α) form unreliable when the phase exceeds 2π.
+pub fn extract_velocity(
+    psi: &morphis::even_field::EvenField<3>,
+    grid: &morphis::grid::Grid<3>,
+    ell: f64,
+    mass: f64,
+) -> [ndarray::ArrayD<f64>; 3] {
+    let n = grid.n_cells;
+    let n_complex = n / 2 + 1;
+
+    let scalar_hat = fft_3d(&psi.scalar, n);
+    let pseudo_hat = fft_3d(&psi.pseudoscalar, n);
+
+    let mut velocity: [ndarray::ArrayD<f64>; 3] =
+        std::array::from_fn(|_| ndarray::ArrayD::zeros(ndarray::IxDyn(&[n, n, n])));
+
+    #[allow(clippy::needless_range_loop)]
+    for d in 0..3 {
+        // Spectral derivative: multiply by i * k_d.
+        let mut ds_hat = Array3::<Complex64>::zeros((n, n, n_complex));
+        let mut dp_hat = Array3::<Complex64>::zeros((n, n, n_complex));
+
+        for m0 in 0..n {
+            let kx = grid.wavenumber(m0);
+            for m1 in 0..n {
+                let ky = grid.wavenumber(m1);
+                for m2 in 0..n_complex {
+                    let kz = grid.wavenumber(m2);
+                    let kd = match d {
+                        0 => kx,
+                        1 => ky,
+                        _ => kz,
+                    };
+                    let ik = Complex64::new(0.0, kd);
+                    ds_hat[[m0, m1, m2]] = scalar_hat[[m0, m1, m2]] * ik;
+                    dp_hat[[m0, m1, m2]] = pseudo_hat[[m0, m1, m2]] * ik;
+                }
+            }
+        }
+
+        let ds = ifft_3d(&ds_hat, n);
+        let dp = ifft_3d(&dp_hat, n);
+
+        // v_d = (ell / (m |alpha|^2)) * (scalar * dp - pseudo * ds)
+        let v_d = velocity[d]
+            .as_slice_mut()
+            .expect("velocity array not contiguous");
+        let s = psi.scalar.as_slice().expect("scalar not contiguous");
+        let p = psi.pseudoscalar.as_slice().expect("pseudo not contiguous");
+        let ds_slice = ds.as_slice().expect("ds not contiguous");
+        let dp_slice = dp.as_slice().expect("dp not contiguous");
+
+        for k in 0..v_d.len() {
+            let mod_sq = s[k] * s[k] + p[k] * p[k];
+            let im_part = s[k] * dp_slice[k] - p[k] * ds_slice[k];
+            v_d[k] = (ell / mass) * im_part / mod_sq;
+        }
+    }
+
+    velocity
+}
+
+// ============================================================================
 // FFT helpers for EvenField components
 // ============================================================================
 
 /// Forward 3D R2C FFT on an ndarray.
-fn fft_3d(data: &ndarray::ArrayD<f64>, n: usize) -> Array3<Complex64> {
+pub fn fft_3d(data: &ndarray::ArrayD<f64>, n: usize) -> Array3<Complex64> {
     let n_complex = n / 2 + 1;
 
     // Reshape to Array3 for ndrustfft.
@@ -187,7 +261,7 @@ fn fft_3d(data: &ndarray::ArrayD<f64>, n: usize) -> Array3<Complex64> {
 }
 
 /// Inverse 3D C2R FFT, returning an ndarray::ArrayD.
-fn ifft_3d(complex: &Array3<Complex64>, n: usize) -> ndarray::ArrayD<f64> {
+pub fn ifft_3d(complex: &Array3<Complex64>, n: usize) -> ndarray::ArrayD<f64> {
     let handler_c2c_0 = FftHandler::new(n);
     let handler_c2c_1 = FftHandler::new(n);
     let handler_r2c = R2cFftHandler::new(n);

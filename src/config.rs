@@ -1,8 +1,8 @@
 /// Configuration loading and management.
 ///
-/// Three-tier hierarchy: embedded defaults → optional config file → programmatic
-/// overrides. Partial TOML files are deep-merged so that only the fields being
-/// overridden need to appear.
+/// Four-tier hierarchy: embedded defaults → scene defaults → optional config
+/// file → CLI overrides. Partial TOML files are deep-merged so that only the
+/// fields being overridden need to appear.
 use std::path::Path;
 
 use serde::Deserialize;
@@ -21,13 +21,15 @@ pub struct Configuration {
     pub simulation: SimulationConfig,
     pub time: TimeConfig,
     pub output: OutputConfig,
+    #[serde(default)]
+    pub visualization: VisualizationConfig,
 }
 
 /// Spatial discretization parameters.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SimulationConfig {
-    /// Number of grid cells per side (total cells = n_cells³).
-    pub n_cells: usize,
+    /// Number of grid cells per side (total cells = n_grid³).
+    pub n_grid: usize,
     /// Number of particles per side (total particles = n_particles³).
     pub n_particles: usize,
     /// Comoving box side length in kpc.
@@ -47,13 +49,57 @@ pub struct TimeConfig {
     pub stepping: String,
 }
 
-/// Output and snapshot parameters.
+/// Output parameters.
 #[derive(Debug, Clone, Deserialize)]
 pub struct OutputConfig {
-    /// Directory for output snapshots.
-    pub directory: String,
-    /// Write a snapshot every this many steps.
-    pub snapshot_interval: usize,
+    /// Save a snapshot every this many steps.
+    pub write_interval: usize,
+    /// Compute full diagnostics every this many steps.
+    pub diagnostic_interval: usize,
+}
+
+/// Visualization parameters.
+#[derive(Debug, Clone, Deserialize)]
+pub struct VisualizationConfig {
+    /// Screen-space point size for particle rendering.
+    pub point_size: f32,
+    /// Screen-space blob size for volumetric field rendering.
+    pub blob_size: f32,
+    /// Per-blob opacity for additive blending.
+    pub blob_alpha: f32,
+    /// Camera distance from origin (box spans [-0.5, 0.5]).
+    pub camera_distance: f32,
+    /// Density / rho_mean for colormap floor.
+    pub colormap_low: f64,
+    /// Density / rho_mean for colormap ceiling.
+    pub colormap_high: f64,
+    /// Grid-point jitter as fraction of cell size.
+    pub jitter: f64,
+}
+
+impl Default for VisualizationConfig {
+    fn default() -> Self {
+        Self {
+            point_size: 5.0,
+            blob_size: 18.0,
+            blob_alpha: 0.12,
+            camera_distance: 1.9,
+            colormap_low: 0.3,
+            colormap_high: 3.0,
+            jitter: 0.3,
+        }
+    }
+}
+
+// ============================================================================
+// Backwards compatibility
+// ============================================================================
+
+impl SimulationConfig {
+    /// Grid cells per side. Alias for n_grid.
+    pub fn n_cells(&self) -> usize {
+        self.n_grid
+    }
 }
 
 // ============================================================================

@@ -201,51 +201,124 @@ fn ifft_3d(complex: &Array3<Complex64>, n: usize) -> Array3<f64> {
     real
 }
 
-/// Initialize with large-amplitude sinusoidal density modes.
+/// Random multi-scale density field converted to wavefunction.
 ///
-/// Produces delta ~ 0.5-2.0 immediately, skipping the slow linear
-/// growth phase. The velocity is set proportional to the density
-/// gradient (as in Zel'dovich), scaled so the flow is dynamically
-/// active from the start.
-pub fn nonlinear_modes(
+/// Generates Fourier modes with Gaussian random amplitudes and a
+/// band-pass spectrum: suppressed below k_min (removes the box-scale
+/// mode that produces a trivial half-and-half split) and above k_max
+/// (removes grid-scale noise). The density amplitude is normalized
+/// to a target delta_rms, producing visible structure immediately.
+///
+/// Velocity is derived from the density gradient (Zel'dovich-like
+/// relation v ~ -grad(delta) / k^2), scaled to be dynamically active.
+pub fn random_density_field(
     grid: &HermesGrid,
-    params: &FieldParams,
     cosmology: &Cosmology,
+    params: &FieldParams,
+    scale_factor_initial: f64,
+    seed: u64,
 ) -> EvenField<3> {
     let n = grid.n_cells;
+    let n_complex = n / 2 + 1;
     let box_length = grid.box_length;
-    let _cell_length = grid.cell_length;
+    let cell_length = grid.cell_length;
     let ell = params.smoothing_length;
     let mass = params.mass_alpha;
     let density_mean = cosmology.density_matter();
 
+    let mut rng = ChaCha20Rng::seed_from_u64(seed);
+
+    let k_fundamental = 2.0 * PI / box_length;
+
+    // Band-pass: suppress the first two modes (box-scale) and
+    // modes above half-Nyquist (grid noise).
+    let k_min = 1.5 * k_fundamental;
+    let k_max = 0.5 * PI * n as f64 / box_length;
+
+    // Generate overdensity in Fourier space with Gaussian amplitudes
+    // and a red spectrum P(k) ~ k^-2 that concentrates power at large
+    // scales, producing visible clumps rather than fine-grained noise.
+    let mut delta_hat = Array3::<Complex64>::zeros((n, n, n_complex));
+
+    for m0 in 0..n {
+        let kx = grid.wavevector_component(m0);
+        for m1 in 0..n {
+            let ky = grid.wavevector_component(m1);
+            for m2 in 0..n_complex {
+                let kz = grid.wavevector_component(m2);
+                let k2 = kx * kx + ky * ky + kz * kz;
+                let k = k2.sqrt();
+
+                if k < k_min || k > k_max {
+                    continue;
+                }
+
+                // Red spectrum: large-scale modes dominate.
+                let amplitude = k_fundamental / k;
+
+                // Gaussian random amplitudes (Box-Muller).
+                let u1: f64 = rng.random_range(1e-10..1.0);
+                let u2: f64 = rng.random_range(0.0..2.0 * PI);
+                let gauss_r = (-2.0 * u1.ln()).sqrt() * u2.cos();
+                let gauss_i = (-2.0 * u1.ln()).sqrt() * u2.sin();
+
+                delta_hat[[m0, m1, m2]] = Complex64::new(gauss_r * amplitude, gauss_i * amplitude);
+            }
+        }
+    }
+
+    // IFFT to real space, then normalize to target amplitude.
+    let delta_raw = ifft_3d(&delta_hat, n);
+    let delta_rms = (delta_raw.iter().map(|d| d * d).sum::<f64>() / delta_raw.len() as f64).sqrt();
+    let target_rms = 0.1;
+    let norm = target_rms / delta_rms.max(1e-30);
+
+    // Compute the velocity potential for the Zel'dovich growing mode.
+    //
+    // The velocity is v = grad(phi_v), where the velocity potential is:
+    //   phi_v_hat(k) = a H(a) f(a) * delta_hat(k) / k^2
+    //
+    // The Madelung phase is S = (m / ell) * phi_v, NOT (m / ell) * v . x.
+    // Using v . x instead of the velocity potential produces an unbounded,
+    // wildly oscillating phase that the kinetic step immediately disperses.
+    let delta_hat_normalized = delta_hat.mapv(|c| c * norm);
+
+    let a = scale_factor_initial;
+    let v_scale = a * cosmology.hubble_parameter(a) * cosmology.growth_rate(a);
+
+    let mut phi_v_hat = Array3::<Complex64>::zeros((n, n, n_complex));
+    for m0 in 0..n {
+        let kx = grid.wavevector_component(m0);
+        for m1 in 0..n {
+            let ky = grid.wavevector_component(m1);
+            for m2 in 0..n_complex {
+                let kz = grid.wavevector_component(m2);
+                let k2 = kx * kx + ky * ky + kz * kz;
+                if k2 < 1e-30 {
+                    continue;
+                }
+                // phi_v_hat = v_scale * delta_hat / k^2
+                phi_v_hat[[m0, m1, m2]] = delta_hat_normalized[[m0, m1, m2]] * (v_scale / k2);
+            }
+        }
+    }
+
+    let phi_v = ifft_3d(&phi_v_hat, n);
+
+    // Build wavefunction via inverse Madelung transform.
+    // alpha = sqrt(rho / m) * exp(I * m * phi_v / ell)
     let morphis_grid = morphis::grid::Grid::<3>::new(n, box_length);
     let g = metric::euclidean::<3>();
 
-    let k1 = 2.0 * PI / box_length;
-    let k2 = 2.0 * k1;
-    let k3 = 3.0 * k1;
-
     EvenField::from_fn(&morphis_grid, g, |x| {
-        // Density: superposition of sinusoidal modes with large amplitude.
-        let delta = 0.5 * (k1 * x[0]).sin()
-            + 0.3 * (k2 * x[1]).sin()
-            + 0.2 * (k3 * x[2]).sin()
-            + 0.15 * (k1 * x[0] + k2 * x[1]).sin();
+        let m0 = ((x[0] / cell_length) as usize).min(n - 1);
+        let m1 = ((x[1] / cell_length) as usize).min(n - 1);
+        let m2 = ((x[2] / cell_length) as usize).min(n - 1);
 
-        let rho = density_mean * (1.0 + delta).max(0.01);
+        let delta = norm * delta_raw[[m0, m1, m2]];
+        let rho = density_mean * (1.0 + delta).max(1e-10);
 
-        // Velocity from density gradient (Zel'dovich-like).
-        // v ~ -H * f * Psi where Psi = -grad(delta) / k^2.
-        // For a simple scaling, use v proportional to grad(delta).
-        let hubble = 0.069; // H0 in Gyr^-1
-        let v_scale = hubble * box_length / (2.0 * PI); // ~ 100 kpc/Gyr
-
-        let vx = -v_scale * 0.5 * k1 * (k1 * x[0]).cos();
-        let vy = -v_scale * 0.3 * k2 * (k2 * x[1]).cos();
-        let vz = -v_scale * 0.2 * k3 * (k3 * x[2]).cos();
-
-        let phase = mass * (vx * x[0] + vy * x[1] + vz * x[2]) / ell;
+        let phase = mass * phi_v[[m0, m1, m2]] / ell;
         let amplitude = (rho / mass).sqrt();
 
         (amplitude * phase.cos(), amplitude * phase.sin())

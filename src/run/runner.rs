@@ -55,14 +55,33 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     let quiet = cli.quiet;
     let scene_name = cli.scene.clone();
     let total_steps = config.time.n_steps;
-
     // Simulation → Router channel.
     let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(512);
     let sender = SnapshotSender::new(sim_tx);
 
+    // Multi-progress for parallel bars.
+    use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
+    let multi = MultiProgress::new();
+
     // Build consumer list.
     let mut consumer_senders: Vec<pipeline::ConsumerConfig> = Vec::new();
     let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
+
+    // Simulation progress bar first (top line).
+    let sim_bar = if !quiet {
+        let bar = multi.add(ProgressBar::new(total_steps as u64));
+        bar.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.cyan} [{elapsed_precise}] [{bar:40.cyan/dark.grey}] step {pos}/{len} z={msg} ({eta} remaining)",
+            )
+            .unwrap()
+            .progress_chars("=> "),
+        );
+        Some(bar)
+    } else {
+        None
+    };
 
     if let Some(ref dir) = save_dir {
         if !quiet {
@@ -73,8 +92,26 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
             tx: disk_tx,
             droppable: false,
         });
+
+        // Disk progress bar second (bottom line).
+        let disk_progress = if !quiet {
+            let write_interval = config.output.write_interval.max(1);
+            let total_snapshots = total_steps / write_interval + 1;
+            let bar = multi.add(ProgressBar::new(total_snapshots as u64));
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "{spinner:.green}            [{bar:40.green/dark.grey}] {pos}/{len} snapshots saved",
+                )
+                .unwrap()
+                .progress_chars("=> "),
+            );
+            Some(bar)
+        } else {
+            None
+        };
+
         let dir_owned = dir.clone();
-        handles.push(spawn_disk_writer(disk_rx, dir_owned));
+        handles.push(spawn_disk_writer(disk_rx, dir_owned, disk_progress));
     }
 
     let router_handle = spawn_router(router_rx, consumer_senders);
@@ -84,35 +121,29 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
 
     let sim_handle = thread::Builder::new()
         .name("simulation".to_string())
-        .spawn(move || -> Result<crate::core::simulation::Simulation, HermesError> {
-            let scene = scene_by_name(&scene_name)?;
-            let mut sim = crate::core::simulation::Simulation::from_scene(&*scene, config, seed)?;
+        .spawn(
+            move || -> Result<crate::core::simulation::Simulation, HermesError> {
+                let scene = scene_by_name(&scene_name)?;
+                let mut sim =
+                    crate::core::simulation::Simulation::from_scene(&*scene, config, seed)?;
 
-            if !quiet {
-                use indicatif::{ProgressBar, ProgressStyle};
+                if !quiet {
+                    let progress_bar = sim_bar.unwrap();
 
-                let progress_bar = ProgressBar::new(total_steps as u64);
-                progress_bar.set_style(
-                    ProgressStyle::with_template(
-                        "{spinner:.cyan} [{elapsed_precise}] [{bar:40.cyan/dark.grey}] step {pos}/{len} z={msg} ({eta} remaining)",
-                    )
-                    .unwrap()
-                    .progress_chars("=> "),
-                );
+                    sim.run_into_pipeline(&sender, |step, scale_factor| {
+                        let redshift = 1.0 / scale_factor - 1.0;
+                        progress_bar.set_position(step as u64);
+                        progress_bar.set_message(format!("{redshift:.1}"));
+                    })?;
 
-                sim.run_into_pipeline(&sender, |step, scale_factor| {
-                    let redshift = 1.0 / scale_factor - 1.0;
-                    progress_bar.set_position(step as u64);
-                    progress_bar.set_message(format!("{redshift:.1}"));
-                })?;
+                    progress_bar.finish_and_clear();
+                } else {
+                    sim.run_into_pipeline(&sender, |_, _| {})?;
+                }
 
-                progress_bar.finish_and_clear();
-            } else {
-                sim.run_into_pipeline(&sender, |_, _| {})?;
-            }
-
-            Ok(sim)
-        })
+                Ok(sim)
+            },
+        )
         .expect("failed to spawn simulation thread");
 
     // Main thread: block waiting for simulation.
@@ -158,6 +189,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     let quiet = cli.quiet;
     let scene_name = cli.scene.clone();
     let box_length = config.simulation.box_length;
+    let vis_config = config.visualization.clone();
 
     if !quiet {
         println!("Starting live viewer + simulation...");
@@ -179,7 +211,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
             tx: disk_tx,
             droppable: false,
         });
-        handles.push(spawn_disk_writer(disk_rx, dir.clone()));
+        handles.push(spawn_disk_writer(disk_rx, dir.clone(), None));
     }
 
     // Precompute → Viewer channel.
@@ -194,6 +226,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
         precompute_rx,
         frame_tx,
         box_length,
+        vis_config.clone(),
     ));
 
     // Router.
@@ -212,7 +245,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
         .expect("failed to spawn simulation thread");
 
     // Main thread: viewer event loop.
-    pipeline::run_viewer_main_thread(frame_rx);
+    pipeline::run_viewer_main_thread(frame_rx, vis_config);
 
     // Clean up.
     let _ = sim_handle.join();
@@ -247,7 +280,19 @@ fn run_playback(dir: &str, cli: &Cli) -> Result<(), HermesError> {
             println!("Playback from {dir}/");
         }
 
-        pipeline::run_playback_viewer(dir, cli.fps)
+        // Playback doesn't run a simulation, so load default vis config.
+        // User can override via a config file argument.
+        let vis_config = if let Some(ref path) = cli.config_file {
+            let content = std::fs::read_to_string(path)?;
+            let val: toml::Value = toml::from_str(&content)
+                .map_err(|e| HermesError::Config(format!("failed to parse {path}: {e}")))?;
+            let config = crate::config::build_configuration(Some(&val), None)?;
+            config.visualization
+        } else {
+            crate::config::VisualizationConfig::default()
+        };
+
+        pipeline::run_playback_viewer(dir, cli.fps, &vis_config)
     }
 }
 
@@ -401,17 +446,20 @@ fn load_config(
         time.insert("n_steps".to_string(), toml::Value::Integer(steps as i64));
         overrides.insert("time".to_string(), toml::Value::Table(time));
     }
-    if let Some(particles) = cli.particles {
+    {
         let mut sim = toml::map::Map::new();
-        sim.insert(
-            "n_particles".to_string(),
-            toml::Value::Integer(particles as i64),
-        );
-        sim.insert(
-            "n_cells".to_string(),
-            toml::Value::Integer(particles as i64),
-        );
-        overrides.insert("simulation".to_string(), toml::Value::Table(sim));
+        if let Some(particles) = cli.particles {
+            sim.insert(
+                "n_particles".to_string(),
+                toml::Value::Integer(particles as i64),
+            );
+        }
+        if let Some(grid) = cli.grid {
+            sim.insert("n_grid".to_string(), toml::Value::Integer(grid as i64));
+        }
+        if !sim.is_empty() {
+            overrides.insert("simulation".to_string(), toml::Value::Table(sim));
+        }
     }
 
     let programmatic = if overrides.is_empty() {
@@ -444,7 +492,7 @@ fn load_config(
 fn print_header(config: &Configuration, cli: &Cli) {
     println!("Hermes — {}", cli.scene);
     println!("{}", "=".repeat(40));
-    println!("Grid:       {}³ cells", config.simulation.n_cells);
+    println!("Grid:       {}³ cells", config.simulation.n_cells());
     println!(
         "Particles:  {}³ = {}",
         config.simulation.n_particles,

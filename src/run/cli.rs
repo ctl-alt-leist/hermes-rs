@@ -45,9 +45,13 @@ pub struct Cli {
     #[arg(long)]
     pub steps: Option<usize>,
 
-    /// Override particles per side.
+    /// Override particles per side (N_p).
     #[arg(long)]
     pub particles: Option<usize>,
+
+    /// Override grid cells per side (N_g).
+    #[arg(long)]
+    pub grid: Option<usize>,
 
     /// Suppress terminal output.
     #[arg(short, long)]
@@ -58,8 +62,8 @@ impl Cli {
     /// Resolve the save directory.
     ///
     /// - `--save dir` → use that dir
-    /// - `--save` (no arg) → `data/<timestamp>/`
-    /// - no flag and no `--no-save` → `data/<timestamp>/` (save by default)
+    /// - `--save` (no arg) → `data/<scene>/`
+    /// - no flag and no `--no-save` → `data/<scene>/` (save by default)
     /// - `--no-save` → None
     pub fn save_directory(&self) -> Option<String> {
         if self.no_save {
@@ -68,13 +72,7 @@ impl Cli {
 
         match &self.save {
             Some(Some(dir)) => Some(dir.clone()),
-            Some(None) | None => Some(timestamped_dir()),
+            Some(None) | None => Some(format!("data/{}", self.scene)),
         }
     }
-}
-
-fn timestamped_dir() -> String {
-    let now = chrono::Local::now();
-
-    format!("data/{}", now.format("%Y-%m-%d_%H%M%S"))
 }

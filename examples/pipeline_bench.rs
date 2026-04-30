@@ -3,28 +3,27 @@
 //! Run with:
 //!   cargo run --example pipeline_bench --release
 
-use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Instant;
 
 use hermes_rs::config::build_configuration;
 use hermes_rs::core::simulation::Simulation;
 use hermes_rs::io::observer::{FileObserver, NullObserver, Observer};
-use hermes_rs::io::snapshot::Snapshot;
 use hermes_rs::run::pipeline::{PipelineMessage, SnapshotSender, spawn_disk_writer, spawn_router};
 
 fn config(particles: usize, steps: usize) -> hermes_rs::config::Configuration {
     let overrides: toml::Value = toml::from_str(&format!(
         r#"
         [simulation]
-        n_cells = {particles}
+        n_grid = {particles}
         n_particles = {particles}
         [time]
         n_steps = {steps}
         scale_factor_initial = 0.02
         scale_factor_final = 1.0
         [output]
-        snapshot_interval = 10
+        write_interval = 10
+        diagnostic_interval = 10
         "#
     ))
     .unwrap();
@@ -110,7 +109,7 @@ fn main() {
                 droppable: false,
             }],
         );
-        let disk_handle = spawn_disk_writer(disk_rx, dir);
+        let disk_handle = spawn_disk_writer(disk_rx, dir, None);
         let start = Instant::now();
         sim.run_into_pipeline(&sender, |_, _| {}).unwrap();
         let pipeline_disk = start.elapsed();

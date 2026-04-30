@@ -34,21 +34,22 @@ impl Scene for FuzzyDM {
     fn initialize(
         &self,
         config: &Configuration,
-        _cosmology: &Cosmology,
-        _seed: u64,
+        cosmology: &Cosmology,
+        seed: u64,
     ) -> Result<(Content, Box<dyn Dynamics>), HermesError> {
-        let hermes_grid = HermesGrid::new(config.simulation.n_cells, config.simulation.box_length);
+        let hermes_grid =
+            HermesGrid::new(config.simulation.n_cells(), config.simulation.box_length);
         let morphis_grid =
-            MorphisGrid::<3>::new(config.simulation.n_cells, config.simulation.box_length);
+            MorphisGrid::<3>::new(config.simulation.n_cells(), config.simulation.box_length);
 
-        // Calibrated so de Broglie wavelength at sigma_v ~ 300 km/s
-        // matches the cell size: ell/m = sigma_v * dx / (2 pi).
-        // sigma_v = 307 kpc/Gyr, dx = box_length / n_cells.
-        // Calibrated so de Broglie wavelength at the characteristic velocity
-        // matches the cell size: ell/m = sigma_v * dx / (2 pi).
-        let dx = config.simulation.box_length / config.simulation.n_cells as f64;
-        let sigma_v = 307.0; // 300 km/s in kpc/Gyr
-        let ell_over_m = sigma_v * dx / (2.0 * std::f64::consts::PI);
+        // Calibrated so the quantum Jeans length is ~ L_box / 4.
+        // Modes larger than lambda_J collapse under gravity; smaller
+        // modes are stabilized by quantum pressure. This gives a few
+        // Jeans lengths in the box for visible filament/core formation.
+        //
+        // lambda_J = 2 pi / (16 pi G rho / (ell/m)^2)^(1/4)
+        // For lambda_J ~ 2500 kpc: ell/m ~ 480 kpc^2/Gyr.
+        let ell_over_m = 2000.0;
         let mass_alpha = 1e10;
 
         let params = FieldParams {
@@ -56,7 +57,13 @@ impl Scene for FuzzyDM {
             mass_alpha,
         };
 
-        let psi = init::nonlinear_modes(&hermes_grid, &params, _cosmology);
+        let psi = init::random_density_field(
+            &hermes_grid,
+            cosmology,
+            &params,
+            config.time.scale_factor_initial,
+            seed,
+        );
 
         let field_state = FieldState {
             grid: morphis_grid,

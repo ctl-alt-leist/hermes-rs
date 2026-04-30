@@ -40,7 +40,7 @@ impl Scene for GalaxyGroup {
         cosmology: &Cosmology,
         seed: u64,
     ) -> Result<(Content, Box<dyn Dynamics>), HermesError> {
-        let grid = Grid::new(config.simulation.n_cells, config.simulation.box_length);
+        let grid = Grid::new(config.simulation.n_cells(), config.simulation.box_length);
 
         let particles = init::colliding_halos_init(
             config.simulation.n_particles,

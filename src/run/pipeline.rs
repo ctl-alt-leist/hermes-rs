@@ -15,6 +15,7 @@ use std::sync::mpsc::{Receiver, SyncSender};
 use std::thread;
 
 use crate::colormap::colormap_hot;
+use crate::config::VisualizationConfig;
 use crate::io::snapshot::{Snapshot, save_snapshot};
 
 // ============================================================================
@@ -37,10 +38,20 @@ pub enum ViewerMessage {
     Done,
 }
 
+/// How the viewer should render a frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RenderMode {
+    /// Discrete points (particles).
+    Points,
+    /// Soft volumetric blobs with additive blending (fields).
+    Volumetric,
+}
+
 /// Display-ready frame — flat f32 arrays, no morphis types.
 pub struct DisplayFrame {
     pub positions: Vec<[f32; 3]>,
     pub colors: Vec<[f32; 3]>,
+    pub render_mode: RenderMode,
     pub step: usize,
     pub scale_factor: f64,
 }
@@ -156,9 +167,13 @@ pub fn spawn_router(
 // ============================================================================
 
 /// Spawn a disk writer thread. Receives snapshots and saves to bincode files.
+///
+/// If a progress bar is provided, it is incremented after each save
+/// and finished when the writer receives Done.
 pub fn spawn_disk_writer(
     rx: Receiver<PipelineMessage>,
     directory: String,
+    progress: Option<indicatif::ProgressBar>,
 ) -> thread::JoinHandle<()> {
     thread::Builder::new()
         .name("disk-writer".to_string())
@@ -170,15 +185,20 @@ pub fn spawn_disk_writer(
                         let filename = format!("snapshot-{:05}.bin", snapshot.step);
                         let path = std::path::PathBuf::from(&directory).join(filename);
                         match save_snapshot(&snapshot, &path) {
-                            Ok(()) => n_saved += 1,
+                            Ok(()) => {
+                                n_saved += 1;
+                                if let Some(ref bar) = progress {
+                                    bar.set_position(n_saved as u64);
+                                }
+                            }
                             Err(e) => eprintln!("warning: failed to save snapshot: {e}"),
                         }
                     }
                     PipelineMessage::Done => break,
                 }
             }
-            if n_saved > 0 {
-                println!("DiskWriter: saved {n_saved} snapshots to {directory}");
+            if let Some(ref bar) = progress {
+                bar.finish_and_clear();
             }
         })
         .expect("failed to spawn disk writer thread")
@@ -195,6 +215,7 @@ pub fn spawn_precompute(
     rx: Receiver<PipelineMessage>,
     frame_tx: SyncSender<ViewerMessage>,
     box_length: f64,
+    vis_config: VisualizationConfig,
 ) -> thread::JoinHandle<()> {
     thread::Builder::new()
         .name("precompute".to_string())
@@ -202,7 +223,7 @@ pub fn spawn_precompute(
             for msg in rx {
                 match msg {
                     PipelineMessage::Snapshot(snapshot) => {
-                        let frame = precompute_frame_rayon(&snapshot, box_length);
+                        let frame = precompute_frame_rayon(&snapshot, box_length, &vis_config);
                         let _ = frame_tx.try_send(ViewerMessage::Frame(Box::new(frame)));
                     }
                     PipelineMessage::Done => {
@@ -219,7 +240,11 @@ pub fn spawn_precompute(
 ///
 /// Dispatches on content type: particles use velocity colormap,
 /// fields sample density at grid points with brightness colormap.
-pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFrame {
+pub fn precompute_frame_rayon(
+    snapshot: &Snapshot,
+    box_length: f64,
+    vis: &VisualizationConfig,
+) -> DisplayFrame {
     use crate::io::snapshot::SnapshotContent;
 
     let scale = 1.0 / box_length as f32;
@@ -249,6 +274,7 @@ pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFr
             DisplayFrame {
                 positions: out_positions,
                 colors: out_colors,
+                render_mode: RenderMode::Points,
                 step: snapshot.step,
                 scale_factor: snapshot.scale_factor,
             }
@@ -259,78 +285,58 @@ pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFr
                 return DisplayFrame {
                     positions: Vec::new(),
                     colors: Vec::new(),
+                    render_mode: RenderMode::Volumetric,
                     step: snapshot.step,
                     scale_factor: snapshot.scale_factor,
                 };
             }
 
-            // Density-weighted random sampling: draw points with probability
-            // proportional to density. Dense regions get many points,
-            // empty regions get none. Positions randomized within each cell
-            // to avoid grid artifacts.
+            // One point per grid cell at cell center, with a small
+            // random offset to break lattice alignment artifacts.
             use rand::Rng;
             use rand::SeedableRng;
             use rand_chacha::ChaCha20Rng;
 
             let cell_size = 1.0 / n as f64;
-            let total_density: f64 = density.iter().sum();
-            let n_sample_points = 30_000; // target point count
+            let jitter = vis.jitter * cell_size;
 
-            let density_max = density.iter().copied().fold(0.0_f64, f64::max);
-            let density_min = density
-                .iter()
-                .copied()
-                .filter(|&d| d > 0.0)
-                .fold(f64::MAX, f64::min);
-            let log_min = density_min.max(1e-30).ln();
-            let log_max = density_max.max(1e-30).ln();
+            // Fixed colormap scale anchored to mean density.
+            let density_mean = density.iter().sum::<f64>() / density.len() as f64;
+            let log_min = (vis.colormap_low * density_mean).max(1e-30).ln();
+            let log_max = (vis.colormap_high * density_mean).ln();
             let log_range = (log_max - log_min).max(1e-10);
 
-            let mut out_positions = Vec::with_capacity(n_sample_points);
-            let mut out_colors = Vec::with_capacity(n_sample_points);
+            let total = n * n * n;
+            let mut out_positions = Vec::with_capacity(total);
+            let mut out_colors = Vec::with_capacity(total);
 
-            // Use step as seed so each frame has different sampling noise.
-            let mut rng = ChaCha20Rng::seed_from_u64(snapshot.step as u64);
+            // Fixed seed so jitter is stable across frames.
+            let mut rng = ChaCha20Rng::seed_from_u64(0);
 
-            for _ in 0..n_sample_points {
-                // Pick a random cell weighted by density.
-                let target = rng.random_range(0.0..total_density);
-                let mut cumulative = 0.0;
-                let mut chosen = 0_usize;
+            for (flat_idx, &rho) in density.iter().enumerate() {
+                let m0 = flat_idx / (n * n);
+                let m1 = (flat_idx / n) % n;
+                let m2 = flat_idx % n;
 
-                for (flat_idx, &rho) in density.iter().enumerate() {
-                    cumulative += rho;
-                    if cumulative >= target {
-                        chosen = flat_idx;
-                        break;
-                    }
-                }
+                let dx: f64 = rng.random_range(-jitter..jitter);
+                let dy: f64 = rng.random_range(-jitter..jitter);
+                let dz: f64 = rng.random_range(-jitter..jitter);
 
-                let m0 = chosen / (n * n);
-                let m1 = (chosen / n) % n;
-                let m2 = chosen % n;
-
-                // Random position within the cell.
-                let jitter_x: f64 = rng.random_range(0.0..1.0);
-                let jitter_y: f64 = rng.random_range(0.0..1.0);
-                let jitter_z: f64 = rng.random_range(0.0..1.0);
-
-                let x = ((m0 as f64 + jitter_x) * cell_size - 0.5) as f32;
-                let y = ((m1 as f64 + jitter_y) * cell_size - 0.5) as f32;
-                let z = ((m2 as f64 + jitter_z) * cell_size - 0.5) as f32;
+                let x = ((m0 as f64 + 0.5) * cell_size + dx - 0.5) as f32;
+                let y = ((m1 as f64 + 0.5) * cell_size + dy - 0.5) as f32;
+                let z = ((m2 as f64 + 0.5) * cell_size + dz - 0.5) as f32;
 
                 out_positions.push([x, y, z]);
 
-                let rho = density[chosen];
                 let log_rho = rho.max(1e-30).ln();
                 let normalized = ((log_rho - log_min) / log_range).clamp(0.0, 1.0);
-                let brightness = normalized * normalized;
-                out_colors.push(colormap_hot(brightness));
+                out_colors.push(colormap_hot(normalized));
             }
 
             DisplayFrame {
                 positions: out_positions,
                 colors: out_colors,
+                render_mode: RenderMode::Volumetric,
                 step: snapshot.step,
                 scale_factor: snapshot.scale_factor,
             }
@@ -347,40 +353,244 @@ pub fn precompute_frame_rayon(snapshot: &Snapshot, box_length: f64) -> DisplayFr
 /// Receives DisplayFrames from the precompute thread via channel.
 /// Draws the latest frame each render tick. Stays open after simulation
 /// completes. Close the window to exit.
+///
+/// Uses kiss3d's State trait to inject the volumetric renderer for
+/// field content alongside the standard point renderer for particles.
 #[cfg(feature = "vis")]
-pub fn run_viewer_main_thread(frame_rx: Receiver<ViewerMessage>) {
-    use kiss3d::camera::ArcBall;
-    use kiss3d::light::Light;
-    use kiss3d::nalgebra::Point3;
+pub fn run_viewer_main_thread(frame_rx: Receiver<ViewerMessage>, vis_config: VisualizationConfig) {
     use kiss3d::window::Window;
 
     let mut window = Window::new_with_size("hermes — live simulation", 1024, 768);
     window.set_background_color(0.0, 0.0, 0.0);
-    window.set_light(Light::StickToCamera);
-    window.set_point_size(5.0);
+    window.set_point_size(vis_config.point_size);
 
-    // Camera at a 3/4 angle, zoomed out to see the full box.
-    let eye = Point3::new(0.8, 0.6, 1.0);
-    let at = Point3::new(0.0, 0.0, 0.0);
-    let mut camera = ArcBall::new(eye, at);
+    let mut state = ViewerState::new(frame_rx, &vis_config);
 
-    let mut current_frame: Option<Box<DisplayFrame>> = None;
+    while window.render_with_state(&mut state) {}
+}
 
-    while window.render_with_camera(&mut camera) {
-        while let Ok(msg) = frame_rx.try_recv() {
+// ============================================================================
+// Viewer state (kiss3d State trait)
+// ============================================================================
+
+/// Viewer state implementing kiss3d's State trait.
+///
+/// Manages the camera, volumetric renderer, and frame reception.
+/// Dispatches on RenderMode: particle frames use draw_point,
+/// field frames use the volumetric renderer with additive blending.
+#[cfg(feature = "vis")]
+struct ViewerState {
+    camera: kiss3d::camera::ArcBall,
+    volumetric: crate::visuals::volumetric_renderer::VolumetricRenderer,
+    frame_rx: Receiver<ViewerMessage>,
+    current_frame: Option<Box<DisplayFrame>>,
+}
+
+#[cfg(feature = "vis")]
+impl ViewerState {
+    fn new(frame_rx: Receiver<ViewerMessage>, vis: &VisualizationConfig) -> Self {
+        use kiss3d::nalgebra::Point3;
+
+        let d = vis.camera_distance;
+        let eye = Point3::new(d * 0.56, d * 0.42, d * 0.69);
+        let at = Point3::new(0.0, 0.0, 0.0);
+
+        Self {
+            camera: kiss3d::camera::ArcBall::new(eye, at),
+            volumetric: crate::visuals::volumetric_renderer::VolumetricRenderer::new(
+                vis.blob_size,
+                vis.blob_alpha,
+            ),
+            frame_rx,
+            current_frame: None,
+        }
+    }
+
+    /// Create from preloaded frames (for playback).
+    fn from_frames(
+        frames: Vec<DisplayFrame>,
+        fps: u64,
+        vis: &VisualizationConfig,
+    ) -> PlaybackState {
+        use kiss3d::nalgebra::Point3;
+
+        let d = vis.camera_distance;
+        let eye = Point3::new(d * 0.56, d * 0.42, d * 0.69);
+        let at = Point3::new(0.0, 0.0, 0.0);
+
+        PlaybackState {
+            camera: kiss3d::camera::ArcBall::new(eye, at),
+            volumetric: crate::visuals::volumetric_renderer::VolumetricRenderer::new(
+                vis.blob_size,
+                vis.blob_alpha,
+            ),
+            frames,
+            frame_index: 0,
+            frame_duration: std::time::Duration::from_millis(1000 / fps.max(1)),
+            last_frame_time: std::time::Instant::now(),
+            paused: false,
+        }
+    }
+}
+
+#[cfg(feature = "vis")]
+impl kiss3d::window::State for ViewerState {
+    fn step(&mut self, window: &mut kiss3d::window::Window) {
+        use kiss3d::light::Light;
+        use kiss3d::nalgebra::Point3;
+
+        window.set_light(Light::StickToCamera);
+
+        // Drain the channel for the latest frame.
+        while let Ok(msg) = self.frame_rx.try_recv() {
             match msg {
-                ViewerMessage::Frame(frame) => current_frame = Some(frame),
+                ViewerMessage::Frame(frame) => self.current_frame = Some(frame),
                 ViewerMessage::Done => {}
             }
         }
 
-        if let Some(ref frame) = current_frame {
-            for (pos, color) in frame.positions.iter().zip(frame.colors.iter()) {
-                let point = Point3::new(pos[0], pos[1], pos[2]);
-                let color_point = Point3::new(color[0], color[1], color[2]);
-                window.draw_point(&point, &color_point);
+        if let Some(ref frame) = self.current_frame {
+            match frame.render_mode {
+                RenderMode::Points => {
+                    for (pos, color) in frame.positions.iter().zip(frame.colors.iter()) {
+                        let point = Point3::new(pos[0], pos[1], pos[2]);
+                        let color_point = Point3::new(color[0], color[1], color[2]);
+                        window.draw_point(&point, &color_point);
+                    }
+                }
+                RenderMode::Volumetric => {
+                    for (pos, color) in frame.positions.iter().zip(frame.colors.iter()) {
+                        let point = Point3::new(pos[0], pos[1], pos[2]);
+                        let color_point = Point3::new(color[0], color[1], color[2]);
+                        self.volumetric.draw_point(point, color_point);
+                    }
+                }
             }
         }
+    }
+
+    fn cameras_and_effect_and_renderer(
+        &mut self,
+    ) -> (
+        Option<&mut dyn kiss3d::camera::Camera>,
+        Option<&mut dyn kiss3d::planar_camera::PlanarCamera>,
+        Option<&mut dyn kiss3d::renderer::Renderer>,
+        Option<&mut dyn kiss3d::post_processing::PostProcessingEffect>,
+    ) {
+        (
+            Some(&mut self.camera),
+            None,
+            Some(&mut self.volumetric),
+            None,
+        )
+    }
+}
+
+/// Playback state for pre-loaded frames.
+///
+/// Keyboard controls:
+///   Space — play / pause
+///   Left  — previous frame
+///   Right — next frame
+///   Down  — back 10%
+///   Up    — forward 10%
+///   Home  — jump to first frame
+///   End   — jump to last frame
+#[cfg(feature = "vis")]
+struct PlaybackState {
+    camera: kiss3d::camera::ArcBall,
+    volumetric: crate::visuals::volumetric_renderer::VolumetricRenderer,
+    frames: Vec<DisplayFrame>,
+    frame_index: usize,
+    frame_duration: std::time::Duration,
+    last_frame_time: std::time::Instant,
+    paused: bool,
+}
+
+#[cfg(feature = "vis")]
+impl kiss3d::window::State for PlaybackState {
+    fn step(&mut self, window: &mut kiss3d::window::Window) {
+        use kiss3d::event::{Action, Key};
+        use kiss3d::light::Light;
+        use kiss3d::nalgebra::Point3;
+
+        window.set_light(Light::StickToCamera);
+
+        if self.frames.is_empty() {
+            return;
+        }
+
+        // Keyboard controls.
+        let n = self.frames.len();
+        let jump = (n / 10).max(1);
+
+        if window.get_key(Key::Space) == Action::Press {
+            self.paused = !self.paused;
+        }
+
+        if window.get_key(Key::Left) == Action::Press && self.frame_index > 0 {
+            self.frame_index -= 1;
+            self.paused = true;
+        }
+        if window.get_key(Key::Right) == Action::Press && self.frame_index < n - 1 {
+            self.frame_index += 1;
+            self.paused = true;
+        }
+        if window.get_key(Key::Down) == Action::Press {
+            self.frame_index = self.frame_index.saturating_sub(jump);
+            self.paused = true;
+        }
+        if window.get_key(Key::Up) == Action::Press {
+            self.frame_index = (self.frame_index + jump).min(n - 1);
+            self.paused = true;
+        }
+        if window.get_key(Key::Home) == Action::Press {
+            self.frame_index = 0;
+            self.paused = true;
+        }
+        if window.get_key(Key::End) == Action::Press {
+            self.frame_index = n - 1;
+            self.paused = true;
+        }
+
+        if !self.paused && self.last_frame_time.elapsed() >= self.frame_duration {
+            self.frame_index = (self.frame_index + 1) % n;
+            self.last_frame_time = std::time::Instant::now();
+        }
+
+        let frame = &self.frames[self.frame_index];
+        match frame.render_mode {
+            RenderMode::Points => {
+                for (pos, color) in frame.positions.iter().zip(frame.colors.iter()) {
+                    let point = Point3::new(pos[0], pos[1], pos[2]);
+                    let color_point = Point3::new(color[0], color[1], color[2]);
+                    window.draw_point(&point, &color_point);
+                }
+            }
+            RenderMode::Volumetric => {
+                for (pos, color) in frame.positions.iter().zip(frame.colors.iter()) {
+                    let point = Point3::new(pos[0], pos[1], pos[2]);
+                    let color_point = Point3::new(color[0], color[1], color[2]);
+                    self.volumetric.draw_point(point, color_point);
+                }
+            }
+        }
+    }
+
+    fn cameras_and_effect_and_renderer(
+        &mut self,
+    ) -> (
+        Option<&mut dyn kiss3d::camera::Camera>,
+        Option<&mut dyn kiss3d::planar_camera::PlanarCamera>,
+        Option<&mut dyn kiss3d::renderer::Renderer>,
+        Option<&mut dyn kiss3d::post_processing::PostProcessingEffect>,
+    ) {
+        (
+            Some(&mut self.camera),
+            None,
+            Some(&mut self.volumetric),
+            None,
+        )
     }
 }
 
@@ -390,11 +600,13 @@ pub fn run_viewer_main_thread(frame_rx: Receiver<ViewerMessage>) {
 /// precomputes DisplayFrames, and sends them to the viewer. Memory
 /// usage is bounded by the channel capacity.
 #[cfg(feature = "vis")]
-pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::HermesError> {
+pub fn run_playback_viewer(
+    dir: &str,
+    fps: u64,
+    vis_config: &VisualizationConfig,
+) -> Result<(), crate::error::HermesError> {
     use std::sync::mpsc as playback_mpsc;
 
-    use kiss3d::light::Light;
-    use kiss3d::nalgebra::Point3;
     use kiss3d::window::Window;
 
     use crate::io::snapshot::load_snapshot;
@@ -414,6 +626,7 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
     let box_length = estimate_box_length(&first);
 
     // Loader thread: load + precompute frames, send via channel.
+    let vis = vis_config.clone();
     let (frame_tx, frame_rx) = playback_mpsc::sync_channel::<ViewerMessage>(32);
 
     let loader_handle = thread::Builder::new()
@@ -422,7 +635,7 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
             for path in &snapshot_paths {
                 match crate::io::snapshot::load_snapshot(path) {
                     Ok(snapshot) => {
-                        let frame = precompute_frame_rayon(&snapshot, box_length);
+                        let frame = precompute_frame_rayon(&snapshot, box_length, &vis);
                         // Blocking send — playback should not drop frames.
                         if frame_tx
                             .send(ViewerMessage::Frame(Box::new(frame)))
@@ -440,7 +653,7 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
 
     // Collect all frames from the loader thread before starting playback.
     // This ensures smooth rendering — no I/O during the render loop.
-    let mut frames: Vec<Box<DisplayFrame>> = Vec::with_capacity(total);
+    let mut frames: Vec<DisplayFrame> = Vec::with_capacity(total);
 
     {
         use indicatif::{ProgressBar, ProgressStyle};
@@ -457,7 +670,7 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
         for msg in frame_rx {
             match msg {
                 ViewerMessage::Frame(frame) => {
-                    frames.push(frame);
+                    frames.push(*frame);
                     progress.set_position(frames.len() as u64);
                 }
                 ViewerMessage::Done => break,
@@ -477,32 +690,11 @@ pub fn run_playback_viewer(dir: &str, fps: u64) -> Result<(), crate::error::Herm
     // Render loop — pure playback from precomputed data, no I/O.
     let mut window = Window::new_with_size("hermes — playback", 1024, 768);
     window.set_background_color(0.0, 0.0, 0.0);
-    window.set_light(Light::StickToCamera);
-    window.set_point_size(5.0);
+    window.set_point_size(vis_config.point_size);
 
-    // Camera at a 3/4 angle, zoomed out to see the full box.
-    let eye = Point3::new(0.8, 0.6, 1.0);
-    let at = Point3::new(0.0, 0.0, 0.0);
-    let mut camera = kiss3d::camera::ArcBall::new(eye, at);
+    let mut state = ViewerState::from_frames(frames, fps, vis_config);
 
-    let n_frames = frames.len();
-    let frame_duration = std::time::Duration::from_millis(1000 / fps.max(1));
-    let mut last_frame_time = std::time::Instant::now();
-    let mut frame_index = 0_usize;
-
-    while window.render_with_camera(&mut camera) {
-        if last_frame_time.elapsed() >= frame_duration {
-            frame_index = (frame_index + 1) % n_frames;
-            last_frame_time = std::time::Instant::now();
-        }
-
-        let frame = &frames[frame_index];
-        for (pos, color) in frame.positions.iter().zip(frame.colors.iter()) {
-            let point = Point3::new(pos[0], pos[1], pos[2]);
-            let color_point = Point3::new(color[0], color[1], color[2]);
-            window.draw_point(&point, &color_point);
-        }
-    }
+    while window.render_with_state(&mut state) {}
 
     Ok(())
 }

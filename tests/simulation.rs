@@ -6,7 +6,7 @@ fn small_config() -> hermes_rs::config::Configuration {
     let overrides: toml::Value = toml::from_str(
         r#"
         [simulation]
-        n_cells = 8
+        n_grid = 8
         n_particles = 8
         box_length = 100000.0
 
@@ -17,7 +17,8 @@ fn small_config() -> hermes_rs::config::Configuration {
         stepping = "log_a"
 
         [output]
-        snapshot_interval = 1
+        write_interval = 1
+        diagnostic_interval = 1
         "#,
     )
     .unwrap();
@@ -45,7 +46,7 @@ fn simulation_records_diagnostics() {
 
     sim.run(&mut []).unwrap();
 
-    // With snapshot_interval = 1 and 5 steps, we get initial + 5 snapshots = 6.
+    // With diagnostic_interval = 1 and 5 steps, we get initial + 5 = 6 records.
     assert_eq!(
         sim.diagnostics_history.len(),
         6,

@@ -194,7 +194,7 @@ fn main() {
     let config_val: toml::Value = toml::from_str(
         r#"
         [simulation]
-        n_cells = 32
+        n_grid = 32
         n_particles = 32
         box_length = 50000.0
         [time]
@@ -203,7 +203,8 @@ fn main() {
         n_steps = 100
         stepping = "log_a"
         [output]
-        snapshot_interval = 100
+        write_interval = 100
+        diagnostic_interval = 100
     "#,
     )
     .unwrap();

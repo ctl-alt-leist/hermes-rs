@@ -10,9 +10,11 @@ fn load_defaults_succeeds() {
 
     assert!((config.cosmology.hubble - 0.674).abs() < 1e-10);
     assert!((config.cosmology.omega_m - 0.315).abs() < 1e-10);
-    assert_eq!(config.simulation.n_cells, 64);
-    assert_eq!(config.simulation.n_particles, 64);
-    assert_eq!(config.time.n_steps, 200);
+    assert_eq!(config.simulation.n_grid, 64);
+    assert_eq!(config.simulation.n_particles, 32);
+    assert_eq!(config.time.n_steps, 300);
+    assert_eq!(config.output.write_interval, 1);
+    assert_eq!(config.output.diagnostic_interval, 10);
 }
 
 #[test]
@@ -34,7 +36,7 @@ fn partial_override_merges_correctly() {
         omega_lambda = 0.6999085
 
         [simulation]
-        n_cells = 128
+        n_grid = 128
         "#,
     )
     .unwrap();
@@ -43,12 +45,12 @@ fn partial_override_merges_correctly() {
 
     // Overridden values
     assert!((config.cosmology.omega_m - 0.30).abs() < 1e-10);
-    assert_eq!(config.simulation.n_cells, 128);
+    assert_eq!(config.simulation.n_grid, 128);
 
     // Non-overridden values remain at defaults
     assert!((config.cosmology.hubble - 0.674).abs() < 1e-10);
-    assert_eq!(config.simulation.n_particles, 64);
-    assert_eq!(config.time.n_steps, 200);
+    assert_eq!(config.simulation.n_particles, 32);
+    assert_eq!(config.time.n_steps, 300);
 }
 
 #[test]
@@ -70,7 +72,7 @@ fn two_tier_override() {
     let file_val: toml::Value = toml::from_str(
         r#"
         [simulation]
-        n_cells = 128
+        n_grid = 128
         n_particles = 128
         "#,
     )
@@ -87,7 +89,7 @@ fn two_tier_override() {
     let config =
         build_configuration(Some(&file_val), Some(&override_val)).expect("merge should succeed");
 
-    // file_val sets n_cells = 128, override_val overrides n_particles to 256
-    assert_eq!(config.simulation.n_cells, 128);
+    // file_val sets n_grid = 128, override_val overrides n_particles to 256
+    assert_eq!(config.simulation.n_grid, 128);
     assert_eq!(config.simulation.n_particles, 256);
 }

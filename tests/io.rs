@@ -190,7 +190,7 @@ fn simulation_with_memory_observer() {
     let overrides: toml::Value = toml::from_str(
         r#"
         [simulation]
-        n_cells = 8
+        n_grid = 8
         n_particles = 8
 
         [time]
@@ -199,7 +199,8 @@ fn simulation_with_memory_observer() {
         scale_factor_final = 0.05
 
         [output]
-        snapshot_interval = 5
+        write_interval = 5
+        diagnostic_interval = 5
         "#,
     )
     .unwrap();

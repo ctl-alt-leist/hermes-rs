@@ -51,7 +51,7 @@ impl Simulation {
         let diagnostics_history = if let Some(particles) = content.particles() {
             // Need a temporary solver for initial diagnostics.
             let grid = crate::physics::grid::Grid::new(
-                config.simulation.n_cells,
+                config.simulation.n_cells(),
                 config.simulation.box_length,
             );
             let mut solver = crate::physics::poisson::PoissonSolver::new(&grid);
@@ -139,7 +139,7 @@ impl Simulation {
             // Full diagnostics at wider interval.
             let is_diagnostic_step = self
                 .step
-                .is_multiple_of(self.config.output.snapshot_interval)
+                .is_multiple_of(self.config.output.diagnostic_interval)
                 || self.step == self.config.time.n_steps;
 
             if is_diagnostic_step && let Some(particles) = self.content.particles() {
@@ -149,7 +149,7 @@ impl Simulation {
                 // TODO: expose solver through dynamics trait or compute diagnostics
                 // differently for field content.
                 let grid = crate::physics::grid::Grid::new(
-                    self.config.simulation.n_cells,
+                    self.config.simulation.n_cells(),
                     self.config.simulation.box_length,
                 );
                 let mut solver = crate::physics::poisson::PoissonSolver::new(&grid);
@@ -208,23 +208,28 @@ impl Simulation {
 
             on_step(self.step, self.scale_factor);
 
-            // Lightweight snapshot.
-            let snapshot = std::sync::Arc::new(Snapshot::capture_from_content(
-                &self.content,
-                self.step,
-                self.scale_factor,
-            ));
-            sender.send(snapshot);
+            // Snapshot at write_interval or final step.
+            let is_write_step = self.step.is_multiple_of(self.config.output.write_interval)
+                || self.step == self.config.time.n_steps;
+
+            if is_write_step {
+                let snapshot = std::sync::Arc::new(Snapshot::capture_from_content(
+                    &self.content,
+                    self.step,
+                    self.scale_factor,
+                ));
+                sender.send(snapshot);
+            }
 
             // Full diagnostics at wider interval.
             let is_diagnostic_step = self
                 .step
-                .is_multiple_of(self.config.output.snapshot_interval)
+                .is_multiple_of(self.config.output.diagnostic_interval)
                 || self.step == self.config.time.n_steps;
 
             if is_diagnostic_step && let Some(particles) = self.content.particles() {
                 let grid = crate::physics::grid::Grid::new(
-                    self.config.simulation.n_cells,
+                    self.config.simulation.n_cells(),
                     self.config.simulation.box_length,
                 );
                 let mut solver = crate::physics::poisson::PoissonSolver::new(&grid);
