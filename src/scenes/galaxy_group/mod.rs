@@ -46,7 +46,7 @@ impl Scene for GalaxyGroup {
             config.simulation.n_particles,
             &grid,
             cosmology,
-            config.time.scale_factor_initial,
+            config.time.scale_factor_initial(),
             seed,
         )?;
 

@@ -7,5 +7,4 @@ n_particles = 64
 box_length  = 100000.0   # 100 Mpc in kpc
 
 [time]
-scale_factor_initial = 0.02   # z ~ 49
-scale_factor_final   = 1.0    # z = 0
+scale_factor_range = [0.02, 1.0]  # z ~ 49 to z = 0

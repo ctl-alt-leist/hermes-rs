@@ -42,15 +42,8 @@ impl Scene for FuzzyDM {
         let morphis_grid =
             MorphisGrid::<3>::new(config.simulation.n_cells(), config.simulation.box_length);
 
-        // Calibrated so the quantum Jeans length is ~ L_box / 4.
-        // Modes larger than lambda_J collapse under gravity; smaller
-        // modes are stabilized by quantum pressure. This gives a few
-        // Jeans lengths in the box for visible filament/core formation.
-        //
-        // lambda_J = 2 pi / (16 pi G rho / (ell/m)^2)^(1/4)
-        // For lambda_J ~ 2500 kpc: ell/m ~ 480 kpc^2/Gyr.
-        let ell_over_m = 2000.0;
-        let mass_alpha = 1e10;
+        let ell_over_m = config.field.length_scale;
+        let mass_alpha = config.field.mass;
 
         let params = FieldParams {
             smoothing_length: ell_over_m * mass_alpha,
@@ -61,7 +54,9 @@ impl Scene for FuzzyDM {
             &hermes_grid,
             cosmology,
             &params,
-            config.time.scale_factor_initial,
+            config.time.scale_factor_initial(),
+            config.initialization.perturbation_amplitude,
+            config.initialization.band_pass,
             seed,
         );
 

@@ -37,7 +37,7 @@ impl Scene for CosmicWeb {
             config.simulation.n_particles,
             &grid,
             cosmology,
-            config.time.scale_factor_initial,
+            config.time.scale_factor_initial(),
             seed,
         )?;
 

@@ -194,9 +194,8 @@ fn simulation_with_memory_observer() {
         n_particles = 8
 
         [time]
+        scale_factor_range = [0.02, 0.05]
         n_steps = 5
-        scale_factor_initial = 0.02
-        scale_factor_final = 0.05
 
         [output]
         write_interval = 5

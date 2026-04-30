@@ -43,7 +43,7 @@ impl Simulation {
         scene.validate(&config)?;
 
         let cosmology = config.cosmology.clone();
-        let scale_factor = config.time.scale_factor_initial;
+        let scale_factor = config.time.scale_factor_initial();
 
         let (content, dynamics) = scene.initialize(&config, &cosmology, seed)?;
 
@@ -94,10 +94,10 @@ impl Simulation {
         on_step: impl Fn(usize, f64),
     ) -> Result<usize, HermesError> {
         let schedule = scale_factor_schedule(
-            self.config.time.scale_factor_initial,
-            self.config.time.scale_factor_final,
+            self.config.time.scale_factor_initial(),
+            self.config.time.scale_factor_final(),
             self.config.time.n_steps,
-            &self.config.time.stepping,
+            &self.config.time.scale_factor_stepping,
         );
 
         // Notify observers with initial snapshot.
@@ -178,10 +178,10 @@ impl Simulation {
         on_step: impl Fn(usize, f64),
     ) -> Result<usize, HermesError> {
         let schedule = scale_factor_schedule(
-            self.config.time.scale_factor_initial,
-            self.config.time.scale_factor_final,
+            self.config.time.scale_factor_initial(),
+            self.config.time.scale_factor_final(),
             self.config.time.n_steps,
-            &self.config.time.stepping,
+            &self.config.time.scale_factor_stepping,
         );
 
         // Send initial snapshot.

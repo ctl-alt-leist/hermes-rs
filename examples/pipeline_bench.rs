@@ -18,9 +18,8 @@ fn config(particles: usize, steps: usize) -> hermes_rs::config::Configuration {
         n_grid = {particles}
         n_particles = {particles}
         [time]
+        scale_factor_range = [0.02, 1.0]
         n_steps = {steps}
-        scale_factor_initial = 0.02
-        scale_factor_final = 1.0
         [output]
         write_interval = 10
         diagnostic_interval = 10

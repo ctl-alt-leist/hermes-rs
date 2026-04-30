@@ -127,7 +127,7 @@ pub fn scale_factor_schedule(
     let mut schedule = Vec::with_capacity(n_steps + 1);
 
     match stepping {
-        "log_a" => {
+        "log" | "log_a" => {
             let log_start = scale_factor_initial.ln();
             let log_end = scale_factor_final.ln();
             let d_log = (log_end - log_start) / n_steps as f64;
@@ -136,7 +136,7 @@ pub fn scale_factor_schedule(
                 schedule.push((log_start + n as f64 * d_log).exp());
             }
         }
-        "linear_a" => {
+        "linear" | "linear_a" => {
             let da = (scale_factor_final - scale_factor_initial) / n_steps as f64;
 
             for n in 0..=n_steps {

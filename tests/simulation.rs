@@ -11,10 +11,9 @@ fn small_config() -> hermes_rs::config::Configuration {
         box_length = 100000.0
 
         [time]
-        scale_factor_initial = 0.02
-        scale_factor_final = 0.05
+        scale_factor_range = [0.02, 0.05]
         n_steps = 5
-        stepping = "log_a"
+        scale_factor_stepping = "log"
 
         [output]
         write_interval = 1

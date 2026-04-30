@@ -216,6 +216,8 @@ pub fn random_density_field(
     cosmology: &Cosmology,
     params: &FieldParams,
     scale_factor_initial: f64,
+    perturbation_amplitude: f64,
+    band_pass: [f64; 2],
     seed: u64,
 ) -> EvenField<3> {
     let n = grid.n_cells;
@@ -230,10 +232,8 @@ pub fn random_density_field(
 
     let k_fundamental = 2.0 * PI / box_length;
 
-    // Band-pass: suppress the first two modes (box-scale) and
-    // modes above half-Nyquist (grid noise).
-    let k_min = 1.5 * k_fundamental;
-    let k_max = 0.5 * PI * n as f64 / box_length;
+    let k_min = band_pass[0] * k_fundamental;
+    let k_max = band_pass[1] * PI * n as f64 / box_length;
 
     // Generate overdensity in Fourier space with Gaussian amplitudes
     // and a red spectrum P(k) ~ k^-2 that concentrates power at large
@@ -270,7 +270,7 @@ pub fn random_density_field(
     // IFFT to real space, then normalize to target amplitude.
     let delta_raw = ifft_3d(&delta_hat, n);
     let delta_rms = (delta_raw.iter().map(|d| d * d).sum::<f64>() / delta_raw.len() as f64).sqrt();
-    let target_rms = 0.1;
+    let target_rms = perturbation_amplitude;
     let norm = target_rms / delta_rms.max(1e-30);
 
     // Compute the velocity potential for the Zel'dovich growing mode.

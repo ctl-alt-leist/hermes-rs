@@ -6,7 +6,6 @@ n_particles  = 32
 box_length   = 8000.0     # 8 Mpc in kpc
 
 [time]
-scale_factor_initial = 1.0    # z = 0
-scale_factor_final   = 2.5    # ~15 Gyr forward
-n_steps              = 600
-stepping             = "linear_a"
+scale_factor_range    = [1.0, 2.5]  # z = 0 forward ~15 Gyr
+scale_factor_stepping = "linear"
+n_steps               = 600

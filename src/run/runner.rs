@@ -310,9 +310,19 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
         println!("Recording {total} frames to {output_path}...");
     }
 
-    let width = 512_u32;
-    let height = 512_u32;
-    let point_radius = 1_i32;
+    // Load vis config for GIF parameters.
+    let vis = if let Some(ref path) = cli.config_file {
+        let content = std::fs::read_to_string(path)?;
+        let val: toml::Value = toml::from_str(&content)
+            .map_err(|e| HermesError::Config(format!("failed to parse {path}: {e}")))?;
+        crate::config::build_configuration(Some(&val), None)?.visualization
+    } else {
+        crate::config::VisualizationConfig::default()
+    };
+
+    let width = vis.gif_resolution;
+    let height = vis.gif_resolution;
+    let point_radius = vis.gif_point_radius;
 
     let first = load_snapshot(&snapshot_paths[0])?;
     let box_length = first
@@ -505,8 +515,8 @@ fn print_header(config: &Configuration, cli: &Cli) {
     );
     println!(
         "Redshift:   z = {:.0} → z = {:.1}",
-        1.0 / config.time.scale_factor_initial - 1.0,
-        1.0 / config.time.scale_factor_final - 1.0,
+        1.0 / config.time.scale_factor_initial() - 1.0,
+        1.0 / config.time.scale_factor_final() - 1.0,
     );
     println!("Steps:      {}", config.time.n_steps);
     println!("Seed:       {}", cli.seed);

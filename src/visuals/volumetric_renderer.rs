@@ -26,14 +26,16 @@ pub struct VolumetricRenderer {
     view: ShaderUniform<Matrix4<f32>>,
     point_size_uniform: ShaderUniform<f32>,
     alpha_uniform: ShaderUniform<f32>,
+    falloff_uniform: ShaderUniform<f32>,
     points: GPUVec<Point3<f32>>,
     point_size: f32,
     alpha: f32,
+    falloff: f32,
 }
 
 impl VolumetricRenderer {
     /// Create a new volumetric renderer.
-    pub fn new(point_size: f32, alpha: f32) -> Self {
+    pub fn new(point_size: f32, alpha: f32, falloff: f32) -> Self {
         let mut shader = Effect::new_from_str(VERTEX_SRC, FRAGMENT_SRC);
         shader.use_program();
 
@@ -44,10 +46,12 @@ impl VolumetricRenderer {
             view: shader.get_uniform("view").unwrap(),
             point_size_uniform: shader.get_uniform("point_size").unwrap(),
             alpha_uniform: shader.get_uniform("blob_alpha").unwrap(),
+            falloff_uniform: shader.get_uniform("blob_falloff").unwrap(),
             points: GPUVec::new(Vec::new(), BufferType::Array, AllocationType::StreamDraw),
             shader,
             point_size,
             alpha,
+            falloff,
         }
     }
 
@@ -88,6 +92,7 @@ impl Renderer for VolumetricRenderer {
         camera.upload(pass, &mut self.proj, &mut self.view);
         self.point_size_uniform.upload(&self.point_size);
         self.alpha_uniform.upload(&self.alpha);
+        self.falloff_uniform.upload(&self.falloff);
 
         self.color.bind_sub_buffer(&mut self.points, 1, 1);
         self.pos.bind_sub_buffer(&mut self.points, 1, 0);
@@ -135,12 +140,13 @@ const FRAGMENT_SRC: &str = "#version 100
 
     varying vec3 Color;
     uniform float blob_alpha;
+    uniform float blob_falloff;
     void main() {
         vec2 coord = gl_PointCoord - vec2(0.5);
         float r2 = dot(coord, coord);
         if (r2 > 0.25) discard;
 
-        float falloff = exp(-10.0 * r2);
+        float falloff = exp(-blob_falloff * r2);
         float alpha = falloff * blob_alpha;
         gl_FragColor = vec4(Color * alpha, alpha);
     }";

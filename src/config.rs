@@ -22,6 +22,10 @@ pub struct Configuration {
     pub time: TimeConfig,
     pub output: OutputConfig,
     #[serde(default)]
+    pub initialization: InitializationConfig,
+    #[serde(default)]
+    pub field: FieldConfig,
+    #[serde(default)]
     pub visualization: VisualizationConfig,
 }
 
@@ -39,14 +43,24 @@ pub struct SimulationConfig {
 /// Time-stepping parameters.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TimeConfig {
-    /// Initial scale factor (a = 1/(1+z)).
-    pub scale_factor_initial: f64,
-    /// Final scale factor.
-    pub scale_factor_final: f64,
+    /// Scale factor range [initial, final] where a = 1/(1+z).
+    pub scale_factor_range: [f64; 2],
     /// Number of time steps.
     pub n_steps: usize,
-    /// Stepping strategy: "log_a" (logarithmic in a) or "linear_a".
-    pub stepping: String,
+    /// Scale factor stepping: "log" (logarithmic) or "linear".
+    pub scale_factor_stepping: String,
+}
+
+impl TimeConfig {
+    /// Initial scale factor.
+    pub fn scale_factor_initial(&self) -> f64 {
+        self.scale_factor_range[0]
+    }
+
+    /// Final scale factor.
+    pub fn scale_factor_final(&self) -> f64 {
+        self.scale_factor_range[1]
+    }
 }
 
 /// Output parameters.
@@ -58,6 +72,47 @@ pub struct OutputConfig {
     pub diagnostic_interval: usize,
 }
 
+/// Initial condition parameters.
+#[derive(Debug, Clone, Deserialize)]
+pub struct InitializationConfig {
+    /// Spectrum source: "power" (CDM P(k)) or "random" (synthetic red spectrum).
+    pub spectrum: String,
+    /// RMS amplitude of initial density perturbations.
+    pub perturbation_amplitude: f64,
+    /// Band-pass filter as [k_min / k_fundamental, k_max / k_nyquist].
+    /// Only used with "random" spectrum.
+    pub band_pass: [f64; 2],
+}
+
+impl Default for InitializationConfig {
+    fn default() -> Self {
+        Self {
+            spectrum: "power".to_string(),
+            perturbation_amplitude: 0.1,
+            band_pass: [1.5, 0.5],
+        }
+    }
+}
+
+/// Field theory (Schrodinger-Poisson) parameters.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FieldConfig {
+    /// Smoothing length ratio ℓ/m (kpc² / Gyr).
+    /// Controls the quantum Jeans length and de Broglie wavelength.
+    pub length_scale: f64,
+    /// Field mass parameter (M_☉).
+    pub mass: f64,
+}
+
+impl Default for FieldConfig {
+    fn default() -> Self {
+        Self {
+            length_scale: 2000.0,
+            mass: 1e10,
+        }
+    }
+}
+
 /// Visualization parameters.
 #[derive(Debug, Clone, Deserialize)]
 pub struct VisualizationConfig {
@@ -67,14 +122,20 @@ pub struct VisualizationConfig {
     pub blob_size: f32,
     /// Per-blob opacity for additive blending.
     pub blob_alpha: f32,
+    /// Gaussian falloff rate for volumetric blobs.
+    pub blob_falloff: f32,
     /// Camera distance from origin (box spans [-0.5, 0.5]).
     pub camera_distance: f32,
-    /// Density / rho_mean for colormap floor.
-    pub colormap_low: f64,
-    /// Density / rho_mean for colormap ceiling.
-    pub colormap_high: f64,
+    /// Camera direction as [x, y, z] (multiplied by distance).
+    pub camera_angle: [f32; 3],
+    /// Colormap range as [floor, ceiling] in units of density / rho_mean.
+    pub colormap_range: [f64; 2],
     /// Grid-point jitter as fraction of cell size.
     pub jitter: f64,
+    /// Pixel resolution for GIF recording.
+    pub gif_resolution: u32,
+    /// Point radius in pixels for GIF rendering.
+    pub gif_point_radius: i32,
 }
 
 impl Default for VisualizationConfig {
@@ -83,22 +144,37 @@ impl Default for VisualizationConfig {
             point_size: 5.0,
             blob_size: 18.0,
             blob_alpha: 0.12,
+            blob_falloff: 10.0,
             camera_distance: 1.9,
-            colormap_low: 0.3,
-            colormap_high: 3.0,
+            camera_angle: [0.56, 0.42, 0.69],
+            colormap_range: [0.3, 3.0],
             jitter: 0.3,
+            gif_resolution: 512,
+            gif_point_radius: 1,
         }
     }
 }
 
 // ============================================================================
-// Backwards compatibility
+// Convenience accessors
 // ============================================================================
 
 impl SimulationConfig {
     /// Grid cells per side. Alias for n_grid.
     pub fn n_cells(&self) -> usize {
         self.n_grid
+    }
+}
+
+impl VisualizationConfig {
+    /// Camera eye position as [x, y, z].
+    pub fn camera_eye(&self) -> [f32; 3] {
+        let d = self.camera_distance;
+        [
+            d * self.camera_angle[0],
+            d * self.camera_angle[1],
+            d * self.camera_angle[2],
+        ]
     }
 }
 

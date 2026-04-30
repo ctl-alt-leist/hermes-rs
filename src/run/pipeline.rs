@@ -302,8 +302,8 @@ pub fn precompute_frame_rayon(
 
             // Fixed colormap scale anchored to mean density.
             let density_mean = density.iter().sum::<f64>() / density.len() as f64;
-            let log_min = (vis.colormap_low * density_mean).max(1e-30).ln();
-            let log_max = (vis.colormap_high * density_mean).ln();
+            let log_min = (vis.colormap_range[0] * density_mean).max(1e-30).ln();
+            let log_max = (vis.colormap_range[1] * density_mean).ln();
             let log_range = (log_max - log_min).max(1e-10);
 
             let total = n * n * n;
@@ -391,8 +391,8 @@ impl ViewerState {
     fn new(frame_rx: Receiver<ViewerMessage>, vis: &VisualizationConfig) -> Self {
         use kiss3d::nalgebra::Point3;
 
-        let d = vis.camera_distance;
-        let eye = Point3::new(d * 0.56, d * 0.42, d * 0.69);
+        let e = vis.camera_eye();
+        let eye = Point3::new(e[0], e[1], e[2]);
         let at = Point3::new(0.0, 0.0, 0.0);
 
         Self {
@@ -400,6 +400,7 @@ impl ViewerState {
             volumetric: crate::visuals::volumetric_renderer::VolumetricRenderer::new(
                 vis.blob_size,
                 vis.blob_alpha,
+                vis.blob_falloff,
             ),
             frame_rx,
             current_frame: None,
@@ -414,8 +415,8 @@ impl ViewerState {
     ) -> PlaybackState {
         use kiss3d::nalgebra::Point3;
 
-        let d = vis.camera_distance;
-        let eye = Point3::new(d * 0.56, d * 0.42, d * 0.69);
+        let e = vis.camera_eye();
+        let eye = Point3::new(e[0], e[1], e[2]);
         let at = Point3::new(0.0, 0.0, 0.0);
 
         PlaybackState {
@@ -423,6 +424,7 @@ impl ViewerState {
             volumetric: crate::visuals::volumetric_renderer::VolumetricRenderer::new(
                 vis.blob_size,
                 vis.blob_alpha,
+                vis.blob_falloff,
             ),
             frames,
             frame_index: 0,

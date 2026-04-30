@@ -198,10 +198,9 @@ fn main() {
         n_particles = 32
         box_length = 50000.0
         [time]
-        scale_factor_initial = 0.02
-        scale_factor_final = 1.0
+        scale_factor_range = [0.02, 1.0]
+        scale_factor_stepping = "log"
         n_steps = 100
-        stepping = "log_a"
         [output]
         write_interval = 100
         diagnostic_interval = 100
