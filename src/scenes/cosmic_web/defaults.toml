@@ -1,7 +1,10 @@
 # Cosmic web: Zel'dovich PM in a 100 Mpc periodic box.
+# Needs 64^3 for adequate PM resolution at this box size.
 
 [simulation]
-box_length = 100000.0    # 100 Mpc in kpc
+n_grid      = 64
+n_particles = 64
+box_length  = 100000.0   # 100 Mpc in kpc
 
 [time]
 scale_factor_initial = 0.02   # z ~ 49

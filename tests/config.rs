@@ -10,7 +10,7 @@ fn load_defaults_succeeds() {
 
     assert!((config.cosmology.hubble - 0.674).abs() < 1e-10);
     assert!((config.cosmology.omega_m - 0.315).abs() < 1e-10);
-    assert_eq!(config.simulation.n_grid, 64);
+    assert_eq!(config.simulation.n_grid, 32);
     assert_eq!(config.simulation.n_particles, 32);
     assert_eq!(config.time.n_steps, 300);
     assert_eq!(config.output.write_interval, 1);

@@ -15,7 +15,7 @@ sigma_8        = 0.811
 spectral_index = 0.965
 
 [simulation]
-n_grid         = 64          # grid cells per side (N_g^3 total)
+n_grid         = 32          # grid cells per side (N_g^3 total)
 n_particles    = 32          # particles per side (N_p^3 total)
 box_length     = 100000.0    # comoving box side in kpc (100 Mpc)
 
