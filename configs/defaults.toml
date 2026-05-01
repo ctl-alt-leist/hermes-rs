@@ -1,4 +1,8 @@
-# Hermes default configuration — Planck 2018 cosmology, starter-grade resolution.
+# Hermes default configuration.
+#
+# Planck 2018 cosmology, starter-grade resolution.
+# Scene-specific overrides live in src/scenes/*/defaults.toml.
+# User overrides: pass a TOML file as the first CLI argument.
 
 [cosmology]
 hubble         = 0.674
@@ -6,21 +10,41 @@ omega_m        = 0.315
 omega_b        = 0.0493
 omega_r        = 9.15e-5
 omega_k        = 0.0
-omega_lambda   = 0.6849085
+omega_v   = 0.6849085
 sigma_8        = 0.811
 spectral_index = 0.965
 
 [simulation]
-n_cells      = 64
-n_particles  = 64
-box_length   = 100000.0   # comoving box side in kpc (≈ 100 Mpc)
+n_grid         = 32          # grid cells per side (N_g^3 total)
+n_particles    = 32          # particles per side (N_p^3 total)
+box_length     = 100000.0    # comoving box side in kpc (100 Mpc)
 
 [time]
-scale_factor_initial = 0.02   # z ≈ 49
-scale_factor_final   = 1.0    # z = 0
-n_steps              = 200
-stepping             = "log_a"
+scale_factor_range    = [0.02, 1.0]  # [initial, final]: z ~ 49 to z = 0
+scale_factor_stepping = "log"        # "log" or "linear"
+n_steps               = 300
 
 [output]
-directory         = "output"
-snapshot_interval = 10
+write_interval      = 1      # save a snapshot every N steps
+diagnostic_interval = 10     # compute full diagnostics every N steps
+
+[initialization]
+spectrum    = "power"           # "power" (CDM P(k)) or "random" (synthetic)
+perturbation_amplitude = 0.1   # RMS density perturbation at initialization
+band_pass   = [1.5, 0.5]       # [k_min / k_fundamental, k_max / k_nyquist]
+
+[field]
+length_scale = 2000.0    # ell/m: smoothing length ratio (kpc^2 / Gyr)
+mass         = 1e10      # field mass parameter (M_sun)
+
+[visualization]
+point_size        = 5.0        # screen-space point size (particles)
+blob_size         = 18.0       # screen-space blob size (volumetric fields)
+blob_alpha        = 0.12       # per-blob opacity for additive blending
+blob_falloff      = 10.0       # Gaussian falloff rate for volumetric blobs
+camera_distance   = 1.9        # distance from origin (box is [-0.5, 0.5])
+camera_angle      = [0.56, 0.42, 0.69]  # direction unit vector (normalized * distance)
+colormap_range    = [0.3, 3.0] # [floor, ceiling] as density / rho_mean
+jitter            = 0.3        # grid-point jitter as fraction of cell size
+gif_resolution    = 512        # pixel size for GIF recording
+gif_point_radius  = 1          # point radius in GIF frames

@@ -16,13 +16,16 @@ cargo test <test_name> # run a single test
 
 ## Project Overview
 
-`hermes-rs` implements **Hierarchical Closure Dynamics (HCD)** -- a multi-scale cosmological simulation framework. The current implementation is a scale-0 particle-mesh N-body simulator with FFT gravity, Zel'dovich initialization, and a threaded pipeline architecture for I/O and visualization.
+`hermes-rs` implements **Hierarchical Closure Dynamics (HCD)** -- a multi-scale cosmological simulation framework. Two dynamical modes at scale-0:
 
-Depends on `morphis` (geometric algebra) for all physical quantities: positions, momenta, and forces are morphis grade-1 vectors; angular momentum is a grade-2 bivector via the wedge product.
+- **Particle-mesh (PM):** Dark matter N-body with CIC, FFT-Poisson gravity, symplectic KDK leapfrog
+- **Schrodinger-Poisson (SP):** Fuzzy dark matter wavefunction via split-step spectral integrator
+
+The Content abstraction (Particles / Fields / Mixed) with pluggable Dynamics lets both modes coexist. Depends on `morphis` (geometric algebra) for all physical quantities.
 
 ### Boundary Between morphis and hermes
 
-- **morphis knows**: elements, products, linear maps, decompositions
+- **morphis knows**: elements, products, linear maps, decompositions, fields, spectral operators
 - **hermes knows**: grids, time integration, scale hierarchy, closure terms, conservation monitoring, I/O, visualization
 
 ## Module Layout
@@ -33,30 +36,37 @@ src/
   colormap.rs         density/velocity colormapping
   config.rs           TOML configuration with deep merge
   error.rs            HermesError enum
-  physics/            simulation core
-    constants.rs      physical constants (kpc, M_☉, Gyr, eV)
+  core/               simulation orchestration
+    content.rs        Content enum (Particles / Fields / Mixed)
+    dynamics.rs       Dynamics trait (pluggable step function)
+    pm_dynamics.rs    ParticleMeshDynamics (KDK + Poisson)
+    schrodinger_dynamics.rs  SchrodingerPoissonDynamics (split-step spectral)
+    simulation.rs     simulation driver (from_scene, from_config, resume)
+  physics/            physical models and solvers
+    constants.rs      physical constants (kpc, M_sun, Gyr, eV)
     cosmology.rs      FLRW background, growth factor, kick/drift factors
-    grid.rs           periodic cubic grid
+    grid.rs           periodic cubic grid geometry
     field.rs          grade-0 and grade-1 fields with morphis extraction
     particles.rs      SoA particle storage with morphis interface
     cic.rs            cloud-in-cell mass assignment + force interpolation
     poisson.rs        FFT Poisson solver (ndrustfft)
     integrator.rs     symplectic KDK leapfrog
     diagnostics.rs    conservation audits
-    simulation.rs     simulation driver (from_scene + from_config)
-  io/                 data I/O
-    snapshot.rs       Snapshot type, bincode serialization
+  io/
+    snapshot.rs       Snapshot type, SnapshotContent enum, bincode serialization
     observer.rs       Observer trait (legacy, used by tests)
-  run/                execution
-    cli.rs            clap-based CLI
-    runner.rs         mode routing (headless, live, playback, record)
+  run/
+    cli.rs            clap-based CLI (--scene, --live, --playback, --resume)
+    runner.rs         mode routing (headless, live, playback, record, resume)
     pipeline.rs       threaded pipeline: router, disk writer, precompute, viewer
-  scenes/             simulation scenarios (each a subdirectory)
+  scenes/             each a subdirectory with init.rs + defaults.toml
     cosmic_web/       Zel'dovich PM in a 100 Mpc periodic box (default)
-    galaxy_group/     constrained Zel'dovich in a 3 Mpc box
-  vis/                visualization (#[cfg(feature = "vis")])
+    galaxy_group/     3 colliding NFW halos in an 8 Mpc box
+    fuzzy_dm/         Schrodinger-Poisson wavefunction in a 10 Mpc box
+  visuals/            (#[cfg(feature = "vis")])
     viewer.rs         static 3D particle viewer (kiss3d)
     plots.rs          density slices, P(k), conservation plots (plotters)
+    volumetric_renderer.rs  additive-blended Gaussian point sprites for fields
 ```
 
 ## Variable Naming
@@ -71,13 +81,18 @@ Use **descriptive names** based on the physical quantity, not mathematical symbo
 |-------------|---------------|-------------|
 | $H_0$ | `H0` | Hubble constant |
 | $Ω_m$ | `omega_m` | Matter density parameter |
+| $Ω_v$ | `omega_v` | Vacuum energy density parameter |
 | $\bar{ρ}_m$ | `density_mean` | Mean comoving matter density |
 | $m_p$ | `mass_particle` | Particle mass |
 | $D_+(a)$ | `growth_factor` | Linear growth factor |
 | $f(a)$ | `growth_rate` | Logarithmic growth rate |
-| $ρ_b$ | `density_baryon` | Baryon density |
+| $ℓ/m$ | `length_scale` | Field smoothing length ratio |
 
-For science-coding conventions (config structure, naming patterns, physical modeling style), consult the sibling project `../plexis/` and its CLAUDE.md.
+In documentation: use α (not ψ) for the dark matter wavefunction field.
+
+## LaTeX in Docs
+
+GitHub's markdown renderer does not support `\,` for thin spaces. Use ` \ ` (backslash-space) instead in all LaTeX within this project's markdown files.
 
 ## Units
 
@@ -85,15 +100,15 @@ Internal units: kpc, M_☉, Gyr, eV ($k_B = 1$). Matches the plexis sibling proj
 
 ## File Naming
 
-Non-code files (configs, snapshots, output) use hyphens: `snapshot-00000.bin`, `cosmic-web`. Timestamp directories use `<date>_<time>` format. Rust source files use underscores per Rust convention.
+Non-code files (configs, snapshots, output) use hyphens: `snapshot-00000.bin`, `cosmic-web`. Rust source files use underscores per Rust convention. User config overrides use `.local.toml` extension (gitignored).
 
 ## Pipeline Architecture
 
-Simulation, disk I/O, and visualization run on independent threads connected by bounded channels. The simulation always runs on a spawned thread; main owns the event loop. `Arc<Snapshot>` enables zero-copy fan-out from the router to multiple consumers.
+Simulation, disk I/O, and visualization run on independent threads connected by bounded channels. The simulation always runs on a spawned thread; main owns the event loop. `Arc<Snapshot>` enables zero-copy fan-out from the router to multiple consumers. Disk writer is non-droppable (every snapshot saved); viewer is droppable (frames silently dropped under load).
 
 ## Configuration
 
-TOML-based, three-tier: embedded `configs/defaults.toml` → optional file override → CLI overrides. Partial files are deep-merged.
+TOML-based, four-tier: embedded `configs/defaults.toml` → scene defaults → optional file override → CLI overrides. Partial files are deep-merged. Sections: `[cosmology]`, `[simulation]`, `[time]`, `[output]`, `[initialization]`, `[field]`, `[visualization]`.
 
 ## Testing
 

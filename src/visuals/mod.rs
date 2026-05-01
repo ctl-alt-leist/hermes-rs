@@ -1,5 +1,7 @@
 mod plots;
 mod viewer;
+#[cfg(feature = "vis")]
+pub mod volumetric_renderer;
 
 pub use crate::colormap::{colormap_hot, particle_density_colors};
 pub use plots::{plot_conservation, plot_power_spectrum, render_density_slice};

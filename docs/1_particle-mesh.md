@@ -2,6 +2,13 @@
 
 The particle-mesh (PM) method computes gravitational forces by depositing particle masses onto a grid, solving the Poisson equation in Fourier space, and interpolating the resulting force field back to particle positions. It is the simplest method that does real cosmological physics and the natural foundation for the HCD framework's scale-0 dynamics.
 
+<figure style="text-align: center; margin: 2em auto;">
+  <img src="../figures/snapshots/cosmic-web-early.png" alt="Cosmic web particles at intermediate redshift" style="display: block; margin: 0 auto; width: 60%; max-width: 60%;">
+  <figcaption style="margin: 0.5em auto 0 auto; font-style: italic; text-align: justify; width: 80%; max-width: 80%;">
+    Particle-mesh simulation at intermediate redshift. Particles have begun moving off their initial lattice positions under gravitational attraction, with early clustering visible.
+  </figcaption>
+</figure>
+
 ## The Force Chain
 
 The gravitational generator $G^{(0)}$ is built from three operators composed as a pipeline:
@@ -15,7 +22,7 @@ $$
 Cloud-in-cell (CIC) interpolation deposits each particle's mass across the 8 surrounding grid cells using trilinear weights. For particle $n$ at position $x_n$ with cell spacing $h$:
 
 $$
-ρ(x_g) = \frac{1}{h^3} \sum_n m_p \, W\left(\frac{x_n - x_g}{h}\right)
+ρ(x_g) = \frac{1}{h^3} \sum_n m_p  \  W\left(\frac{x_n - x_g}{h}\right)
 $$
 
 where $W$ is the product of one-dimensional triangle functions along each axis.
@@ -78,12 +85,12 @@ The closing half-kick force is cached for reuse as the next step's opening half-
 Zel'dovich approximation from a linear power spectrum. Particles start on a uniform Lagrangian lattice and are displaced:
 
 $$
-x_n = q_n + D_+(a_{\text{init}}) \, Ψ(q_n), \qquad p_n = m_p a^2 f H \, Ψ(q_n)
+x_n = q_n + D_+(a_{\text{init}})  \  Ψ(q_n), \qquad p_n = m_p a^2 f H  \  Ψ(q_n)
 $$
 
-where $Ψ(k) = ik / k^2 \, \hat{δ}(k)$ is the displacement field computed from a Gaussian random overdensity. The power spectrum uses the Eisenstein-Hu no-wiggle transfer function normalized by $σ_8$.
+where $Ψ(k) = ik / k^2  \  \hat{δ}(k)$ is the displacement field computed from a Gaussian random overdensity. The power spectrum uses the Eisenstein-Hu no-wiggle transfer function normalized by $σ_8$.
 
-**Implementation:** `physics::initial::zeldovich_init` returns `Particles` with morphis-native positions and momenta.
+**Implementation:** `scenes::cosmic_web::init::zeldovich_init` returns `Particles` with morphis-native positions and momenta. The Fourier amplitude per mode is $\sqrt{P(k) \cdot V_{\text{box}}}$ for an un-normalized FFT convention.
 
 ## Conservation
 

@@ -1,17 +1,14 @@
 //! Cosmic web scene: Zel'dovich PM simulation in a periodic box.
-//!
-//! Dark-matter-only particle-mesh simulation with Zel'dovich initial
-//! conditions from a linear power spectrum. This is the default scene
-//! and the foundation onto which finer scales, baryonic matter, and
-//! learned closures are eventually attached.
 
 pub mod init;
 
 use crate::config::Configuration;
+use crate::core::content::Content;
+use crate::core::dynamics::Dynamics;
+use crate::core::pm_dynamics::ParticleMeshDynamics;
 use crate::error::HermesError;
 use crate::physics::cosmology::Cosmology;
 use crate::physics::grid::Grid;
-use crate::physics::particles::Particles;
 use crate::scenes::Scene;
 
 const SCENE_DEFAULTS: &str = include_str!("defaults.toml");
@@ -28,19 +25,24 @@ impl Scene for CosmicWeb {
         toml::from_str(SCENE_DEFAULTS).ok()
     }
 
-    fn initialize_particles(
+    fn initialize(
         &self,
-        grid: &Grid,
-        cosmology: &Cosmology,
         config: &Configuration,
+        cosmology: &Cosmology,
         seed: u64,
-    ) -> Result<Particles, HermesError> {
-        init::zeldovich_init(
+    ) -> Result<(Content, Box<dyn Dynamics>), HermesError> {
+        let grid = Grid::new(config.simulation.n_cells(), config.simulation.box_length);
+
+        let particles = init::zeldovich_init(
             config.simulation.n_particles,
-            grid,
+            &grid,
             cosmology,
-            config.time.scale_factor_initial,
+            config.time.scale_factor_initial(),
             seed,
-        )
+        )?;
+
+        let dynamics = ParticleMeshDynamics::new(grid);
+
+        Ok((Content::Particles(particles), Box::new(dynamics)))
     }
 }

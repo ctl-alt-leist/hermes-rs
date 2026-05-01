@@ -1,10 +1,10 @@
-# Cosmic web scene defaults.
-# Large periodic box with Zel'dovich initialization from z ~ 49.
+# Cosmic web: Zel'dovich PM in a 100 Mpc periodic box.
+# Needs 64^3 for adequate PM resolution at this box size.
 
 [simulation]
-box_length = 100000.0    # 100 Mpc in kpc
+n_grid      = 64
+n_particles = 64
+box_length  = 100000.0   # 100 Mpc in kpc
 
 [time]
-scale_factor_initial = 0.02   # z ~ 49
-scale_factor_final   = 1.0    # z = 0
-n_steps              = 200
+scale_factor_range = [0.02, 1.0]  # z ~ 49 to z = 0

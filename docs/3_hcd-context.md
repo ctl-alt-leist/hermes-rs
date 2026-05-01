@@ -19,15 +19,24 @@ The key structural commitment: $C^{(s)}$ is parametrized as a rate matrix with z
 
 ## Scale 0: What We Have
 
-The current PM implementation is the simplest instantiation:
+Two dynamical modes at scale 0, unified by the Content abstraction:
 
+**Particle-mesh (PM):**
 - **State:** $Ψ^{(0)} = (\{x_n\}, \{p_n\}, a)$ with $g_{\max}(0) = 1$ (scalars and vectors only)
 - **Generator:** $G^{(0)}$ is the FFT-Poisson gravitational force chain
+- morphis used for positions, momenta (grade-1), angular momentum diagnostic (grade-2)
+
+**Schrodinger-Poisson (SP):**
+- **State:** $Ψ^{(0)} = (α, a)$ where $α \in G^+(\mathbb{R}^3)$ is an even-subalgebra wavefunction
+- **Generator:** split-step spectral integrator with kinetic (FFT phase rotation) and potential (Poisson + phase rotation) operators
+- morphis used as the primary mathematical substrate: $α$ is an `EvenField<3>`, density extraction and phase rotation are morphis operations
+
+Both share:
 - **Closure:** $C^{(0)} = 0$ (no sub-grid corrections yet)
 - **Sources:** $S^{(0)} = 0$ (dark matter only, no chemistry)
 - **Accretion:** $A^{(0)} = 0$ (periodic box, no external inflow)
 
-morphis is exercised lightly: positions and momenta are grade-1 vectors, the angular momentum bivector $L = x \wedge p$ is a grade-2 diagnostic. The geometric and interior products are not yet dynamically active.
+The `Content` enum (Particles / Fields / Mixed) and the `Dynamics` trait allow both modes to coexist. Each scene selects its content type and dynamics at initialization. The simulation driver is content-agnostic.
 
 ## Grade Activation
 
@@ -82,10 +91,19 @@ where $δQ^{(s)}$ has non-negative off-diagonals and zero column sums. This ensu
 
 The bridge is `src/algebra.rs`: the shared Euclidean 3-metric and conversion utilities between flat array storage (for FFT/CIC hot paths) and morphis grade-1 vectors (for all algebraic operations).
 
+<figure style="text-align: center; margin: 2em auto;">
+  <img src="../figures/snapshots/galaxy-group-initial.png" alt="Galaxy group initial configuration" style="display: block; margin: 0 auto; width: 60%; max-width: 60%;">
+  <figcaption style="margin: 0.5em auto 0 auto; font-style: italic; text-align: justify; width: 80%; max-width: 80%;">
+    Three NFW dark matter halos at initialization, before gravitational interaction. Each halo has an infall velocity toward the group center of mass.
+  </figcaption>
+</figure>
+
 ## Scene System
 
-The `scenes/` module provides the `Scene` trait for different simulation setups. Currently only `CosmicWeb` (Zel'dovich PM) is implemented. Future scenes:
+The `scenes/` module provides the `Scene` trait for different simulation setups. Each scene returns a `(Content, Box<dyn Dynamics>)` pair. Current scenes:
 
-- **Halo collapse:** isolated NFW profile, gravitational infall
-- **Zel'dovich pancake:** 1D perturbation for convergence testing
-- **Coupled zoom:** scale-0 box + scale-1 zoom patch (first multi-scale test)
+- **cosmic-web:** Zel'dovich PM in a 100 Mpc box (64^3 default)
+- **galaxy-group:** 3 colliding NFW halos in an 8 Mpc box (32^3 default)
+- **fuzzy-dm:** Schrodinger-Poisson wavefunction in a 10 Mpc box (64^3 default)
+
+The long-term direction is a unified engine where scenes are convenience presets for content + physics module selection, and any snapshot can be resumed without specifying a scene (see `docs/unified-engine.md`).

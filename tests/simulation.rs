@@ -1,23 +1,23 @@
 use hermes_rs::config::build_configuration;
-use hermes_rs::physics::simulation::Simulation;
+use hermes_rs::core::simulation::Simulation;
 
 /// Small configuration for fast tests: 8³ grid, 8³ particles, 5 steps.
 fn small_config() -> hermes_rs::config::Configuration {
     let overrides: toml::Value = toml::from_str(
         r#"
         [simulation]
-        n_cells = 8
+        n_grid = 8
         n_particles = 8
         box_length = 100000.0
 
         [time]
-        scale_factor_initial = 0.02
-        scale_factor_final = 0.05
+        scale_factor_range = [0.02, 0.05]
         n_steps = 5
-        stepping = "log_a"
+        scale_factor_stepping = "log"
 
         [output]
-        snapshot_interval = 1
+        write_interval = 1
+        diagnostic_interval = 1
         "#,
     )
     .unwrap();
@@ -45,7 +45,7 @@ fn simulation_records_diagnostics() {
 
     sim.run(&mut []).unwrap();
 
-    // With snapshot_interval = 1 and 5 steps, we get initial + 5 snapshots = 6.
+    // With diagnostic_interval = 1 and 5 steps, we get initial + 5 = 6 records.
     assert_eq!(
         sim.diagnostics_history.len(),
         6,

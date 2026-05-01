@@ -9,12 +9,12 @@
 use std::time::Instant;
 
 use hermes_rs::config::build_configuration;
+use hermes_rs::core::simulation::Simulation;
 use hermes_rs::physics::cosmology::planck_2018;
 use hermes_rs::physics::grid::Grid;
 use hermes_rs::physics::initial::zeldovich_init;
 use hermes_rs::physics::integrator::{midpoint, step_kdk};
 use hermes_rs::physics::poisson::PoissonSolver;
-use hermes_rs::physics::simulation::Simulation;
 
 fn main() {
     println!("Hermes Benchmark");
@@ -194,16 +194,16 @@ fn main() {
     let config_val: toml::Value = toml::from_str(
         r#"
         [simulation]
-        n_cells = 32
+        n_grid = 32
         n_particles = 32
         box_length = 50000.0
         [time]
-        scale_factor_initial = 0.02
-        scale_factor_final = 1.0
+        scale_factor_range = [0.02, 1.0]
+        scale_factor_stepping = "log"
         n_steps = 100
-        stepping = "log_a"
         [output]
-        snapshot_interval = 100
+        write_interval = 100
+        diagnostic_interval = 100
     "#,
     )
     .unwrap();
@@ -211,9 +211,9 @@ fn main() {
     let mut sim = Simulation::from_config(config, 42).unwrap();
     sim.run(&mut []).unwrap();
 
-    let velocity_max_final = (0..sim.particles.count())
+    let velocity_max_final = (0..sim.content.particles().unwrap().count())
         .map(|p| {
-            let mom = sim.particles.momentum_of(p);
+            let mom = sim.content.particles().unwrap().momentum_of(p);
             mom.norm() / (mass * 1.0 * 1.0)
         })
         .fold(0.0_f64, f64::max);

@@ -1,22 +1,11 @@
-# Galaxy group scene defaults.
-# Multiple dark matter halos in a periodic box, on collision courses.
-#
-# Physical setup:
-#   - 3 halos with masses in ratio 1.0 : 0.6 : 0.3 (total ~ 10^13 M_sun)
-#   - Virial radii ~300-600 kpc
-#   - Placed within a ~3 Mpc region, box is 8 Mpc (images well separated)
-#   - Start at a = 1.0 (z = 0), evolve ~15 Gyr forward (a = 2.5)
-#
-# The halos approach each other with velocities derived from
-# gravitational infall and should merge within the simulated time.
+# Galaxy group: 3 colliding NFW halos in an 8 Mpc box.
 
 [simulation]
-n_cells      = 32
+n_grid       = 32
 n_particles  = 32
 box_length   = 8000.0     # 8 Mpc in kpc
 
 [time]
-scale_factor_initial = 1.0    # z = 0 (present day)
-scale_factor_final   = 2.5    # ~15 Gyr forward
-n_steps              = 600
-stepping             = "linear_a"
+scale_factor_range    = [1.0, 2.5]  # z = 0 forward ~15 Gyr
+scale_factor_stepping = "linear"
+n_steps               = 600

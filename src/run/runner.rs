@@ -22,6 +22,10 @@ pub fn run(cli: &Cli) -> Result<(), HermesError> {
         return run_playback(dir, cli);
     }
 
+    if let Some(ref dir) = cli.resume {
+        return run_resume(dir, cli);
+    }
+
     // Look up scene first so its defaults can be merged into config.
     let scene = scene_by_name(&cli.scene)?;
     let config = load_config(cli, scene.default_overrides())?;
@@ -55,14 +59,33 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     let quiet = cli.quiet;
     let scene_name = cli.scene.clone();
     let total_steps = config.time.n_steps;
-
     // Simulation → Router channel.
     let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(512);
     let sender = SnapshotSender::new(sim_tx);
 
+    // Multi-progress for parallel bars.
+    use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
+    let multi = MultiProgress::new();
+
     // Build consumer list.
     let mut consumer_senders: Vec<pipeline::ConsumerConfig> = Vec::new();
     let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
+
+    // Simulation progress bar first (top line).
+    let sim_bar = if !quiet {
+        let bar = multi.add(ProgressBar::new(total_steps as u64));
+        bar.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.cyan} [{elapsed_precise}] [{bar:40.cyan/dark.grey}] step {pos}/{len} z={msg} ({eta} remaining)",
+            )
+            .unwrap()
+            .progress_chars("=> "),
+        );
+        Some(bar)
+    } else {
+        None
+    };
 
     if let Some(ref dir) = save_dir {
         if !quiet {
@@ -73,8 +96,26 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
             tx: disk_tx,
             droppable: false,
         });
+
+        // Disk progress bar second (bottom line).
+        let disk_progress = if !quiet {
+            let write_interval = config.output.write_interval.max(1);
+            let total_snapshots = total_steps / write_interval + 1;
+            let bar = multi.add(ProgressBar::new(total_snapshots as u64));
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "{spinner:.green}            [{bar:40.green/dark.grey}] {pos}/{len} snapshots saved",
+                )
+                .unwrap()
+                .progress_chars("=> "),
+            );
+            Some(bar)
+        } else {
+            None
+        };
+
         let dir_owned = dir.clone();
-        handles.push(spawn_disk_writer(disk_rx, dir_owned));
+        handles.push(spawn_disk_writer(disk_rx, dir_owned, disk_progress));
     }
 
     let router_handle = spawn_router(router_rx, consumer_senders);
@@ -84,35 +125,29 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
 
     let sim_handle = thread::Builder::new()
         .name("simulation".to_string())
-        .spawn(move || -> Result<crate::physics::simulation::Simulation, HermesError> {
-            let scene = scene_by_name(&scene_name)?;
-            let mut sim = crate::physics::simulation::Simulation::from_scene(&*scene, config, seed)?;
+        .spawn(
+            move || -> Result<crate::core::simulation::Simulation, HermesError> {
+                let scene = scene_by_name(&scene_name)?;
+                let mut sim =
+                    crate::core::simulation::Simulation::from_scene(&*scene, config, seed)?;
 
-            if !quiet {
-                use indicatif::{ProgressBar, ProgressStyle};
+                if !quiet {
+                    let progress_bar = sim_bar.unwrap();
 
-                let progress_bar = ProgressBar::new(total_steps as u64);
-                progress_bar.set_style(
-                    ProgressStyle::with_template(
-                        "{spinner:.cyan} [{elapsed_precise}] [{bar:40.cyan/dark.grey}] step {pos}/{len} z={msg} ({eta} remaining)",
-                    )
-                    .unwrap()
-                    .progress_chars("=> "),
-                );
+                    sim.run_into_pipeline(&sender, |step, scale_factor| {
+                        let redshift = 1.0 / scale_factor - 1.0;
+                        progress_bar.set_position(step as u64);
+                        progress_bar.set_message(format!("{redshift:.1}"));
+                    })?;
 
-                sim.run_into_pipeline(&sender, |step, scale_factor| {
-                    let redshift = 1.0 / scale_factor - 1.0;
-                    progress_bar.set_position(step as u64);
-                    progress_bar.set_message(format!("{redshift:.1}"));
-                })?;
+                    progress_bar.finish_and_clear();
+                } else {
+                    sim.run_into_pipeline(&sender, |_, _| {})?;
+                }
 
-                progress_bar.finish_and_clear();
-            } else {
-                sim.run_into_pipeline(&sender, |_, _| {})?;
-            }
-
-            Ok(sim)
-        })
+                Ok(sim)
+            },
+        )
         .expect("failed to spawn simulation thread");
 
     // Main thread: block waiting for simulation.
@@ -158,6 +193,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     let quiet = cli.quiet;
     let scene_name = cli.scene.clone();
     let box_length = config.simulation.box_length;
+    let vis_config = config.visualization.clone();
 
     if !quiet {
         println!("Starting live viewer + simulation...");
@@ -179,7 +215,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
             tx: disk_tx,
             droppable: false,
         });
-        handles.push(spawn_disk_writer(disk_rx, dir.clone()));
+        handles.push(spawn_disk_writer(disk_rx, dir.clone(), None));
     }
 
     // Precompute → Viewer channel.
@@ -194,6 +230,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
         precompute_rx,
         frame_tx,
         box_length,
+        vis_config.clone(),
     ));
 
     // Router.
@@ -204,8 +241,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
         .name("simulation".to_string())
         .spawn(move || -> Result<(), HermesError> {
             let scene = scene_by_name(&scene_name)?;
-            let mut sim =
-                crate::physics::simulation::Simulation::from_scene(&*scene, config, seed)?;
+            let mut sim = crate::core::simulation::Simulation::from_scene(&*scene, config, seed)?;
             sim.run_into_pipeline(&sender, |_, _| {})?;
 
             Ok(())
@@ -213,13 +249,179 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
         .expect("failed to spawn simulation thread");
 
     // Main thread: viewer event loop.
-    pipeline::run_viewer_main_thread(frame_rx);
+    pipeline::run_viewer_main_thread(frame_rx, vis_config);
 
     // Clean up.
     let _ = sim_handle.join();
     let _ = router_handle.join();
     for h in handles {
         let _ = h.join();
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Resume: continue from the last snapshot
+// ============================================================================
+
+fn run_resume(dir: &str, cli: &Cli) -> Result<(), HermesError> {
+    use crate::io::snapshot::load_snapshot;
+
+    // Find and load the last snapshot.
+    let paths = pipeline::find_snapshot_paths(dir);
+    let last_path = paths
+        .last()
+        .ok_or_else(|| HermesError::Config(format!("no snapshots found in {dir}/")))?;
+
+    let snapshot = load_snapshot(last_path)?;
+    let particles = snapshot
+        .to_particles()
+        .ok_or_else(|| HermesError::Config("resume requires particle content".to_string()))?;
+
+    let a_start = snapshot.scale_factor;
+
+    if !cli.quiet {
+        println!(
+            "Resuming from {} (step {}, a = {:.4}, z = {:.1})",
+            last_path.display(),
+            snapshot.step,
+            a_start,
+            1.0 / a_start - 1.0,
+        );
+    }
+
+    // Build config. The scale_factor_range starts from the snapshot's a.
+    // The user provides the final a and n_steps via config/CLI.
+    let scene = scene_by_name(&cli.scene)?;
+    let mut config = load_config(cli, scene.default_overrides())?;
+
+    // Override the initial scale factor to the snapshot's value.
+    config.time.scale_factor_range[0] = a_start;
+
+    if !cli.quiet {
+        println!(
+            "Evolving a = {:.4} → {:.4} in {} steps ({})",
+            config.time.scale_factor_initial(),
+            config.time.scale_factor_final(),
+            config.time.n_steps,
+            config.time.scale_factor_stepping,
+        );
+        println!();
+    }
+
+    let start_step = snapshot.step;
+
+    let mut sim = crate::core::simulation::Simulation::resume_particles(
+        particles,
+        a_start,
+        start_step,
+        config.clone(),
+    )?;
+
+    // Save to the same directory we resumed from (unless --save overrides).
+    let save_dir = if cli.no_save {
+        None
+    } else {
+        match &cli.save {
+            Some(Some(d)) => Some(d.clone()),
+            _ => Some(dir.to_string()),
+        }
+    };
+    let quiet = cli.quiet;
+    let total_steps = config.time.n_steps;
+
+    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(512);
+    let sender = SnapshotSender::new(sim_tx);
+
+    use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+    let multi = MultiProgress::new();
+
+    let mut consumer_senders: Vec<pipeline::ConsumerConfig> = Vec::new();
+    let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
+
+    let sim_bar = if !quiet {
+        let bar = multi.add(ProgressBar::new(total_steps as u64));
+        bar.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.cyan} [{elapsed_precise}] [{bar:40.cyan/dark.grey}] step {pos}/{len} a={msg} ({eta} remaining)",
+            )
+            .unwrap()
+            .progress_chars("=> "),
+        );
+        Some(bar)
+    } else {
+        None
+    };
+
+    if let Some(ref dir) = save_dir {
+        if !quiet {
+            println!("Saving snapshots to {dir}/");
+        }
+        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(512);
+        consumer_senders.push(pipeline::ConsumerConfig {
+            tx: disk_tx,
+            droppable: false,
+        });
+
+        let disk_progress = if !quiet {
+            let write_interval = config.output.write_interval.max(1);
+            let total_snapshots = total_steps / write_interval + 1;
+            let bar = multi.add(ProgressBar::new(total_snapshots as u64));
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "{spinner:.green}            [{bar:40.green/dark.grey}] {pos}/{len} snapshots saved",
+                )
+                .unwrap()
+                .progress_chars("=> "),
+            );
+            Some(bar)
+        } else {
+            None
+        };
+
+        let dir_owned = dir.clone();
+        handles.push(spawn_disk_writer(disk_rx, dir_owned, disk_progress));
+    }
+
+    let router_handle = spawn_router(router_rx, consumer_senders);
+    let run_start = Instant::now();
+
+    let sim_handle = thread::Builder::new()
+        .name("simulation".to_string())
+        .spawn(
+            move || -> Result<crate::core::simulation::Simulation, HermesError> {
+                if !quiet {
+                    let progress_bar = sim_bar.unwrap();
+                    sim.run_into_pipeline(&sender, |step, scale_factor| {
+                        progress_bar.set_position(step as u64);
+                        progress_bar.set_message(format!("{scale_factor:.4}"));
+                    })?;
+                    progress_bar.finish_and_clear();
+                } else {
+                    sim.run_into_pipeline(&sender, |_, _| {})?;
+                }
+
+                Ok(sim)
+            },
+        )
+        .expect("failed to spawn simulation thread");
+
+    let sim = sim_handle.join().expect("simulation thread panicked")?;
+    let run_time = run_start.elapsed();
+
+    let _ = router_handle.join();
+    for h in handles {
+        let _ = h.join();
+    }
+
+    if !quiet {
+        println!(
+            "Completed {} steps in {:.2}s ({:.1} ms/step)",
+            sim.step,
+            run_time.as_secs_f64(),
+            run_time.as_secs_f64() * 1000.0 / sim.step as f64,
+        );
     }
 
     Ok(())
@@ -248,7 +450,19 @@ fn run_playback(dir: &str, cli: &Cli) -> Result<(), HermesError> {
             println!("Playback from {dir}/");
         }
 
-        pipeline::run_playback_viewer(dir, cli.fps)
+        // Playback doesn't run a simulation, so load default vis config.
+        // User can override via a config file argument.
+        let vis_config = if let Some(ref path) = cli.config_file {
+            let content = std::fs::read_to_string(path)?;
+            let val: toml::Value = toml::from_str(&content)
+                .map_err(|e| HermesError::Config(format!("failed to parse {path}: {e}")))?;
+            let config = crate::config::build_configuration(Some(&val), None)?;
+            config.visualization
+        } else {
+            crate::config::VisualizationConfig::default()
+        };
+
+        pipeline::run_playback_viewer(dir, cli.fps, &vis_config)
     }
 }
 
@@ -266,15 +480,26 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
         println!("Recording {total} frames to {output_path}...");
     }
 
-    let width = 512_u32;
-    let height = 512_u32;
-    let point_radius = 1_i32;
+    // Load vis config for GIF parameters.
+    let vis = if let Some(ref path) = cli.config_file {
+        let content = std::fs::read_to_string(path)?;
+        let val: toml::Value = toml::from_str(&content)
+            .map_err(|e| HermesError::Config(format!("failed to parse {path}: {e}")))?;
+        crate::config::build_configuration(Some(&val), None)?.visualization
+    } else {
+        crate::config::VisualizationConfig::default()
+    };
+
+    let width = vis.gif_resolution;
+    let height = vis.gif_resolution;
+    let point_radius = vis.gif_point_radius;
 
     let first = load_snapshot(&snapshot_paths[0])?;
     let box_length = first
-        .positions
+        .positions()
+        .unwrap_or(&[])
         .iter()
-        .flat_map(|pos| (0..3).map(move |d| pos.component(&[d]).abs()))
+        .flat_map(|pos: &morphis::vector::Vector<3>| (0..3).map(move |d| pos.component(&[d]).abs()))
         .fold(0.0_f64, f64::max)
         * 1.1;
     let scale = 1.0 / box_length;
@@ -308,7 +533,12 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
     for path in &snapshot_paths {
         let snapshot = load_snapshot(path)?;
 
-        let speeds: Vec<f64> = snapshot.momenta.iter().map(|mom| mom.norm()).collect();
+        let speeds: Vec<f64> = snapshot
+            .momenta()
+            .unwrap()
+            .iter()
+            .map(|mom| mom.norm())
+            .collect();
         let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
         let speed_min = speeds.iter().copied().fold(f64::MAX, f64::min);
         let speed_range = (speed_max - speed_min).max(1e-30);
@@ -318,7 +548,7 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
             pixel[3] = 255;
         }
 
-        for (pos, &speed) in snapshot.positions.iter().zip(speeds.iter()) {
+        for (pos, &speed) in snapshot.positions().unwrap().iter().zip(speeds.iter()) {
             let x_norm = pos.component(&[0]) * scale;
             let y_norm = pos.component(&[1]) * scale;
 
@@ -396,17 +626,20 @@ fn load_config(
         time.insert("n_steps".to_string(), toml::Value::Integer(steps as i64));
         overrides.insert("time".to_string(), toml::Value::Table(time));
     }
-    if let Some(particles) = cli.particles {
+    {
         let mut sim = toml::map::Map::new();
-        sim.insert(
-            "n_particles".to_string(),
-            toml::Value::Integer(particles as i64),
-        );
-        sim.insert(
-            "n_cells".to_string(),
-            toml::Value::Integer(particles as i64),
-        );
-        overrides.insert("simulation".to_string(), toml::Value::Table(sim));
+        if let Some(particles) = cli.particles {
+            sim.insert(
+                "n_particles".to_string(),
+                toml::Value::Integer(particles as i64),
+            );
+        }
+        if let Some(grid) = cli.grid {
+            sim.insert("n_grid".to_string(), toml::Value::Integer(grid as i64));
+        }
+        if !sim.is_empty() {
+            overrides.insert("simulation".to_string(), toml::Value::Table(sim));
+        }
     }
 
     let programmatic = if overrides.is_empty() {
@@ -439,7 +672,7 @@ fn load_config(
 fn print_header(config: &Configuration, cli: &Cli) {
     println!("Hermes — {}", cli.scene);
     println!("{}", "=".repeat(40));
-    println!("Grid:       {}³ cells", config.simulation.n_cells);
+    println!("Grid:       {}³ cells", config.simulation.n_cells());
     println!(
         "Particles:  {}³ = {}",
         config.simulation.n_particles,
@@ -452,8 +685,8 @@ fn print_header(config: &Configuration, cli: &Cli) {
     );
     println!(
         "Redshift:   z = {:.0} → z = {:.1}",
-        1.0 / config.time.scale_factor_initial - 1.0,
-        1.0 / config.time.scale_factor_final - 1.0,
+        1.0 / config.time.scale_factor_initial() - 1.0,
+        1.0 / config.time.scale_factor_final() - 1.0,
     );
     println!("Steps:      {}", config.time.n_steps);
     println!("Seed:       {}", cli.seed);

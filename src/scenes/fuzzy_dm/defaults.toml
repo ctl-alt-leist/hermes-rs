@@ -1,0 +1,14 @@
+# Fuzzy dark matter: wavefunction + self-gravity in a 10 Mpc box.
+
+[simulation]
+n_grid       = 64
+n_particles  = 1          # not used for field content
+box_length   = 10000.0    # 10 Mpc in kpc
+
+[time]
+scale_factor_range    = [0.0909, 1.0]  # z ~ 10 to z = 0
+scale_factor_stepping = "linear"
+
+[initialization]
+spectrum               = "random"
+perturbation_amplitude = 0.1

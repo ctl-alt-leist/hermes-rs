@@ -2,3 +2,6 @@
 /output
 /data
 .DS_Store
+
+# User config overrides (tracked defaults live in configs/defaults.toml).
+*.local.toml

@@ -10,7 +10,9 @@ test:
 
 # Build and release
 build:
-	cargo build --release
+	cargo build --release --features vis
+	@echo ""
+	@echo "Run with: ./target/release/hermes"
 
 publish:
 	@VERSION=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/'); \
