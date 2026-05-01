@@ -1,6 +1,6 @@
-# Morphis Field Theory
+# Field Theory
 
-The morphis library now provides a general-purpose field abstraction: spatially-varying geometric algebra objects on periodic grids with spectral differential operators. This document describes what was built, how the API works, and how hermes will use it.
+The field-theoretic sector of hermes uses the morphis library's field abstraction: spatially-varying geometric algebra objects on periodic grids with spectral differential operators. This document describes the field types, their operations, and how they are used in the Schrodinger-Poisson dynamics.
 
 ## Motivation
 
@@ -88,7 +88,7 @@ The wedge and interior products call the corresponding morphis operations pointw
 
 ### Integration
 
-For scalar fields, `f.integrate()` returns $\int f \, dV$ as a volume-weighted sum, and `f.sum()` returns the unweighted sum over all grid points.
+For scalar fields, `f.integrate()` returns $\int f  \  dV$ as a volume-weighted sum, and `f.sum()` returns the unweighted sum over all grid points.
 
 ## Spectral Derivatives
 
@@ -109,7 +109,7 @@ $$
 ### Divergence
 
 $$
-\nabla \cdot f = \sum_a e_a \, \lrcorner \, \partial_a f
+\nabla \cdot f = \sum_a e_a  \  \lrcorner  \  \partial_a f
 $$
 
 `f.div()` lowers grade by 1 via the interior derivative. For a vector field this produces a scalar field.
@@ -155,7 +155,7 @@ These are tested in `tests/field.rs` on analytic solutions (derivatives of sinus
 This is the natural representation of a Schr&ouml;dinger-like wavefunction in the geometric algebra formulation. The amplitude and phase are encoded as the scalar and pseudoscalar parts:
 
 $$
-\alpha(x) = \sqrt{\frac{\rho(x)}{m}} \, \exp\left(\frac{i S(x)}{\hbar}\right) = \sqrt{\frac{\rho(x)}{m}} \left(\cos\frac{S}{\hbar} + I \sin\frac{S}{\hbar}\right)
+\alpha(x) = \sqrt{\frac{\rho(x)}{m}}  \  \exp\left(\frac{i S(x)}{\hbar}\right) = \sqrt{\frac{\rho(x)}{m}} \left(\cos\frac{S}{\hbar} + I \sin\frac{S}{\hbar}\right)
 $$
 
 ### Storage

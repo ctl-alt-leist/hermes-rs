@@ -90,6 +90,10 @@ Use **descriptive names** based on the physical quantity, not mathematical symbo
 
 In documentation: use α (not ψ) for the dark matter wavefunction field.
 
+## LaTeX in Docs
+
+GitHub's markdown renderer does not support `\,` for thin spaces. Use ` \ ` (backslash-space) instead in all LaTeX within this project's markdown files.
+
 ## Units
 
 Internal units: kpc, M_☉, Gyr, eV ($k_B = 1$). Matches the plexis sibling project. Constants in `physics/constants.rs` are ported from `plexis/core/constants.py`.

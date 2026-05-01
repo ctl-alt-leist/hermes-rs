@@ -87,6 +87,44 @@ The full HCD framework envisions multiple scales running simultaneously, with re
 
 The snapshot format should anticipate this: a multi-scale snapshot is a collection of single-scale snapshots at different resolutions, each self-describing. But single-scale operation is the foundation and should work independently.
 
+## Modular Field Registry
+
+The engine should not hardcode which fields exist. Instead, fields are registered components with declared properties. The current `FieldState` with named members (`alpha`, `beta`, `gamma`) is a stepping stone — the variable names are fixed in code, but at the engine level each field is something that can be included or excluded via configuration.
+
+The design:
+
+- A **field species** has a name (α, β, γ), an algebraic type (even subalgebra, bivector, scalar), a mass parameter, coupling constants, and a Lagrangian that determines its dynamics.
+- The **field registry** is a collection of active field species in a simulation. Configuration toggles which species are present.
+- Each species carries its own **dynamical equation** derived from its Lagrangian — the Schrodinger-Poisson equation for α, Euler equations for β, Maxwell for γ, etc.
+- **Interaction terms** (gravity couples all species, electromagnetic couples charged species) are separate from the free-field dynamics. They appear as coupling modules that the engine composes with the free evolution.
+
+Configuration would look like:
+
+```toml
+[fields.alpha]
+type       = "even"        # even subalgebra (scalar + pseudoscalar)
+mass       = 1e10
+length_scale = 2000.0
+dynamics   = "schrodinger-poisson"
+
+[fields.beta]
+type       = "even"
+mass       = 1e6
+dynamics   = "euler"
+
+[fields.gamma]
+type       = "bivector"    # grade-2
+dynamics   = "maxwell"
+
+[interactions]
+gravity    = true          # couples all massive fields
+electromagnetic = false    # couples charged fields only
+```
+
+The engine iterates over registered fields, applies their free dynamics, then applies interaction terms. A simulation with only α and gravity recovers the current fuzzy-dm scene. A simulation with particles and gravity recovers the current cosmic-web scene. Adding β or γ extends the physics without changing the engine.
+
+This is aspirational architecture — the current code uses fixed struct fields because there are only three species and the dynamics are hardcoded. The path from here to the registry is incremental: first make the physics modules composable (the gravity/quantum-pressure/hydro factoring above), then generalize the field storage from named members to a registry keyed by species name.
+
 ## Current State
 
 - Content abstraction exists (Particles / Fields / Mixed enum)

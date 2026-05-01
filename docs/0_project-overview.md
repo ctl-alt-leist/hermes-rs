@@ -110,10 +110,10 @@ Internal units: kpc, M_sun, Gyr, eV ($k_B = 1$). Constants in `physics::constant
 ## Documentation
 
 - [Particle-Mesh Method](1_particle-mesh.md) -- the PM force chain and its physics
-- [Pipeline Architecture](2_pipeline.md) -- threading model and data flow
-- [Configuration](3_configuration.md) -- TOML schema and hierarchy
-- [HCD Context](4_hcd-context.md) -- how this connects to the multi-scale framework
-- [Morphis Fields](5_morphis-fields.md) -- field-theoretic formulation and morphis integration
+- [Field Theory](2_field-theory.md) -- even-subalgebra fields and Schrodinger-Poisson dynamics
+- [HCD Context](3_hcd-context.md) -- how this connects to the multi-scale framework
+- [Pipeline Architecture](4_pipeline.md) -- threading model and data flow
+- [Configuration](5_configuration.md) -- TOML schema and hierarchy
 - [Unified Engine Plan](a_plans-for-a-unified-engine.md) -- content-driven physics composition
 - [Efficient Snapshots Plan](b_plan-for-efficient-snapshots.md) -- I/O bottleneck analysis
 

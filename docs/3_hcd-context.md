@@ -91,6 +91,13 @@ where $δQ^{(s)}$ has non-negative off-diagonals and zero column sums. This ensu
 
 The bridge is `src/algebra.rs`: the shared Euclidean 3-metric and conversion utilities between flat array storage (for FFT/CIC hot paths) and morphis grade-1 vectors (for all algebraic operations).
 
+<figure style="text-align: center; margin: 2em auto;">
+  <img src="../figures/snapshots/galaxy-group-initial.png" alt="Galaxy group initial configuration" style="display: block; margin: 0 auto; width: 60%; max-width: 60%;">
+  <figcaption style="margin: 0.5em auto 0 auto; font-style: italic; text-align: justify; width: 80%; max-width: 80%;">
+    Three NFW dark matter halos at initialization, before gravitational interaction. Each halo has an infall velocity toward the group center of mass.
+  </figcaption>
+</figure>
+
 ## Scene System
 
 The `scenes/` module provides the `Scene` trait for different simulation setups. Each scene returns a `(Content, Box<dyn Dynamics>)` pair. Current scenes:
