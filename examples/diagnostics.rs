@@ -18,11 +18,10 @@ use num_complex::Complex64;
 
 use hermes_rs::core::content::{Content, FieldParams, FieldState};
 use hermes_rs::core::dynamics::Dynamics;
-use hermes_rs::core::schrodinger_dynamics::{
-    SchrodingerPoissonDynamics, fft_3d, ifft_3d, kinetic_step,
-};
+use hermes_rs::core::schrodinger_dynamics::{SchrodingerPoissonDynamics, kinetic_step};
 use hermes_rs::physics::constants::G as GRAV;
 use hermes_rs::physics::cosmology::{Cosmology, planck_2018};
+use hermes_rs::physics::spectral::{fft_3d_dyn as fft_3d, ifft_3d_dyn as ifft_3d};
 
 // ============================================================================
 // Parameters
@@ -816,7 +815,7 @@ fn test_8(report: &mut String, p: &DiagParams) {
         let m1 = ((x[1] / p.dx()) as usize).min(n - 1);
         let m2 = ((x[2] / p.dx()) as usize).min(n - 1);
         let delta = norm * delta_raw[[m0, m1, m2]];
-        let rho = p.rho_bar * (1.0 + delta).max(1e-10);
+        let rho = p.rho_bar * (1.0_f64 + delta).max(1e-10);
         ((rho / p.mass).sqrt(), 0.0)
     });
 

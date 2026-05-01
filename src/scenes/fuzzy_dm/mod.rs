@@ -50,15 +50,25 @@ impl Scene for FuzzyDM {
             mass_alpha,
         };
 
-        let alpha = init::random_density_field(
-            &hermes_grid,
-            cosmology,
-            &params,
-            config.time.scale_factor_initial(),
-            config.initialization.perturbation_amplitude,
-            config.initialization.band_pass,
-            seed,
-        );
+        let alpha = match config.initialization.spectrum.as_str() {
+            "power" => init::zeldovich_wavefunction(
+                &hermes_grid,
+                cosmology,
+                &params,
+                config.time.scale_factor_initial(),
+                config.initialization.perturbation_amplitude,
+                seed,
+            )?,
+            _ => init::random_density_field(
+                &hermes_grid,
+                cosmology,
+                &params,
+                config.time.scale_factor_initial(),
+                config.initialization.perturbation_amplitude,
+                config.initialization.band_pass,
+                seed,
+            ),
+        };
 
         let field_state = FieldState {
             grid: morphis_grid,

@@ -2,6 +2,12 @@
 
 The field-theoretic sector of hermes uses the morphis library's field abstraction: spatially-varying geometric algebra objects on periodic grids with spectral differential operators. This document describes the field types, their operations, and how they are used in the Schrodinger-Poisson dynamics.
 
+| Early (z ~ 10) | Late (z ~ 0) |
+|:-:|:-:|
+| ![Fuzzy DM early](../figures/snapshots/fuzzy-dm-early.png) | ![Fuzzy DM late](../figures/snapshots/fuzzy-dm-late.png) |
+
+The fuzzy-DM scene: volumetric rendering of the dark matter field density $|\alpha|^2$ at early and late times. Overdensities concentrate under self-gravity, with quantum pressure preventing collapse below the de Broglie scale.
+
 ## Motivation
 
 Hermes already has its own `Grid`, `ScalarField`, and `VectorField` types in `physics/`, purpose-built for the PM force chain. These work well for particle-mesh dynamics but are limited to grades 0 and 1, with no notion of grade algebra or differential operators beyond the Poisson solver. The wavefunction formulation of fuzzy dark matter (FDM) requires fields valued in the even subalgebra $G^0 \oplus G^3$, along with gradient, Laplacian, and Laplacian-inverse operators that respect grade structure. Rather than bolt these onto hermes's bespoke field types, the natural home is morphis — where the grade algebra already lives.
@@ -182,18 +188,42 @@ This is more efficient than a general `MultiVector` field and enforces the algeb
 | `psi.norm_squared()` | $a^2 + b^2$ as a scalar `Field<D>` |
 | `psi.rotate_phase(&angle)` | Multiply by $\exp(I\theta)$ pointwise |
 | `psi.density(mass)` | $\rho = m(a^2 + b^2)$ as a scalar `Field<D>` |
+| `psi.integrate_norm_squared()` | Conserved norm $\int |\alpha|^2  \  dV$ |
 | `psi.at(&indices)` | Extract as `MultiVector<D>` at a grid point |
+
+### Spectral Operations
+
+- `psi.laplacian()` — spectral Laplacian applied componentwise, returns `EvenField<D>`
+- `psi.gradient_components()` — returns `[grad(scalar), grad(pseudoscalar)]` as two grade-1 vector fields, with Nyquist mode zeroing
+- `psi.kinetic_energy_density()` — gradient energy density $\frac{1}{2}(|\nabla a|^2 + |\nabla b|^2)$
+- `psi.integrate_norm_squared()` — conserved norm $\int |\alpha|^2  \  dV$
+
+### Madelung Representation
+
+The Madelung decomposition connects the wavefunction to fluid variables. The inverse takes a density field and a velocity *potential* (not the velocity directly) and constructs the wavefunction:
+
+- `EvenField::madelung_inverse(&density, &velocity_potential, mass, diffusivity)` — builds $\alpha$ from $\rho$ and $\phi_v$
+- `psi.madelung_velocity(diffusivity)` — extracts velocity field $v_d = \frac{\nu}{|\alpha|^2}(a  \  \partial_d b - b  \  \partial_d a)$
+
+The asymmetry in the inverse signature is structural: the velocity potential $\phi_v$ (where $\mathbf{v} = \nabla \phi_v$) produces a smooth, bounded phase, while $\mathbf{v} \cdot \mathbf{x}$ grows linearly with distance and aliases on the lattice.
 
 ### Phase Rotation and Split-Step Integration
 
-`rotate_phase` is the operation that makes split-step time integration work. The Schr&ouml;dinger equation in the Madelung formulation separates into kinetic and potential half-steps, each of which is a phase rotation:
+`rotate_phase` is the operation that makes split-step time integration work. The cosmological Schr&ouml;dinger equation
 
-- **Kinetic step** (Fourier space): rotate by $\theta = -\hbar |k|^2 \Delta t / (2m)$
-- **Potential step** (real space): rotate by $\theta = -V(x) \Delta t / \hbar$
+$$
+\ell  \  \mathbb{1}  \  \partial_t \alpha = -\frac{\ell^2}{2  \  m_\alpha  \  a^2} \nabla^2 \alpha + m_\alpha  \  \Phi  \  \alpha
+$$
 
-The `rotate_phase` method applies this pointwise: at each grid point, $(a + bI) \mapsto (a + bI)(\cos\theta + I\sin\theta)$. The angle field is a scalar `Field<D>`, computed from the dispersion relation or the gravitational potential as appropriate.
+separates into kinetic and potential operators under Strang splitting. One full timestep uses the K-V-K ordering (kinetic half, potential full, kinetic half):
 
-This is implemented in `core::schrodinger_dynamics` as the `SchrodingerPoissonDynamics` integrator. The kinetic step FFTs the scalar and pseudoscalar components independently, applies the k-dependent phase rotation $θ = -ℓ k^2 Δt / (2m a^2)$, and IFFTs back. The potential step computes density $ρ = m|α|^2$, solves the Poisson equation via morphis's `laplacian_inverse`, and applies the real-space phase rotation $θ = -m Φ Δt / ℓ$.
+1. **Kinetic half-step** (Fourier space): phase rotation by $\theta = -\ell  \  |k|^2  \  \Delta t / (2  \  m_\alpha  \  a^2)$
+2. **Potential full step** (real space): Poisson solve for $\Phi$, then phase rotation by $\theta = -m_\alpha  \  \Phi  \  \Delta t / \ell$
+3. **Kinetic half-step** (repeat step 1)
+
+The $a^{-2}$ in the kinetic term arises from the comoving Laplacian: $\nabla^2_\text{phys} = a^{-2} \nabla^2_\text{comoving}$. Each factor is exactly unitary in floating-point arithmetic — the kinetic phase has unit modulus per mode and the potential phase has unit modulus per cell — so the integrated norm $\int |\alpha|^2  \  dV$ is preserved to machine precision regardless of $\Delta t$.
+
+This is implemented in `core::schrodinger_dynamics` as the `SchrodingerPoissonDynamics` integrator. The kinetic step uses R2C FFT (via `physics::spectral`) for the scalar and pseudoscalar components independently. The potential step uses morphis's `laplacian_inverse` for the Poisson solve.
 
 ## Boundary with Hermes
 
@@ -206,8 +236,10 @@ The key types and where they belong:
 | Grid geometry | `Grid<D>` | PM `Grid` (finite-difference) |
 | Scalar/vector fields | `Field<D>` (any grade) | `ScalarField`, `VectorField` (PM) |
 | Wavefunction | `EvenField<D>` | — |
+| Madelung transform | `madelung_inverse`, `madelung_velocity` | — |
 | Poisson solve | `f.laplacian_inverse()` (spectral) | `PoissonSolver` (discrete Green's) |
 | Gradient/divergence | `f.grad()`, `f.div()` | — |
+| R2C FFT helpers | — | `physics::spectral` |
 | Physical constants | — | `constants.rs` |
 | Cosmology | — | `cosmology.rs` |
 | Time integration | — | `integrator.rs` (KDK), split-step |
