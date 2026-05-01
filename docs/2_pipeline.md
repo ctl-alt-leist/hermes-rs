@@ -1,15 +1,23 @@
 # Pipeline Architecture
 
-The simulation, disk I/O, and visualization run on independent threads connected by bounded channels. The simulation never blocks on consumers; consumers never block the simulation. Adding a new consumer (remote viewer, metrics exporter) is: write one function that reads from a channel, connect it to the router.
+The simulation, disk I/O, and visualization run on independent threads connected by bounded channels. The simulation never blocks on droppable consumers (viewer); non-droppable consumers (disk writer) apply backpressure if they fall behind. Adding a new consumer is: write one function that reads from a channel, connect it to the router.
 
 ## Topology
 
 ```
-Sim Thread ──ch(8)──> Router ──ch(16)──> Disk Writer
-                         └────ch(4)──> Precompute ──ch(4)──> Main Thread (Viewer)
+Sim Thread ──ch(512)──> Router ──ch(512)──> Disk Writer (non-droppable)
+                           └────ch(4)──> Precompute ──ch(4)──> Main Thread (Viewer)
 ```
 
-Each arrow is a `mpsc::sync_channel` with the capacity shown. The simulation produces `Arc<Snapshot>` into its output channel. The router fans out to consumers by cloning the `Arc` (only the reference count is incremented -- no particle data is copied). Consumers that fall behind have frames silently dropped via `try_send`.
+Each arrow is a `mpsc::sync_channel` with the capacity shown. The simulation produces `Arc<Snapshot>` into its output channel. The router fans out to consumers by cloning the `Arc` (only the reference count is incremented — no particle data is copied).
+
+Consumer channels are configured as droppable or non-droppable via `ConsumerConfig`. The disk writer is non-droppable (blocking send — every snapshot reaches disk). The viewer precompute is droppable (`try_send` — frames are silently dropped when the channel is full, keeping the simulation running at full speed).
+
+## Snapshot Gating
+
+Not every simulation step produces a snapshot for the pipeline. The `write_interval` configuration controls which steps are sent to the disk writer. The simulation only captures and sends a snapshot when the step is a multiple of `write_interval` or is the final step. This reduces I/O without affecting the physics.
+
+For resumed simulations, the step numbering continues from the last snapshot's step number, and the initial duplicate frame is skipped.
 
 ## Threads by Mode
 
@@ -19,8 +27,29 @@ Each arrow is a `mpsc::sync_channel` with the capacity shown. The simulation pro
 | `hermes --live` | spawned | spawned | optional | spawned | viewer loop |
 | `hermes --playback` | -- | -- | -- | loader | viewer loop |
 | `hermes --record` | -- | -- | -- | -- | sequential encode |
+| `hermes --resume` | spawned | spawned | spawned | -- | blocks on join |
 
-The simulation always runs on a spawned thread. The main thread always owns the event loop (macOS requires the window event loop on the main thread). In headless mode, the main thread simply blocks on `sim_handle.join()`.
+The simulation always runs on a spawned thread. The main thread always owns the event loop (macOS requires the window event loop on the main thread). In headless and resume modes, the main thread blocks on `sim_handle.join()`.
+
+## Rendering
+
+The viewer uses kiss3d's `State` trait to support both particle and field rendering in the same window. The `ViewerState` dispatches on `RenderMode`:
+
+- **Points**: Particle snapshots are rendered via `window.draw_point()` through the built-in kiss3d point renderer.
+- **Volumetric**: Field snapshots are rendered via a custom `VolumetricRenderer` that draws point sprites with additive blending and Gaussian falloff. Each grid cell is a soft, semi-transparent blob; overlapping blobs accumulate brightness to produce a smooth volumetric appearance.
+
+The `VolumetricRenderer` is returned from `cameras_and_effect_and_renderer()` on every frame but only does work when volumetric points have been queued. For particle frames it returns immediately with no GL state changes.
+
+### Playback Controls
+
+The playback viewer supports keyboard interaction:
+
+| Key | Action |
+|-----|--------|
+| Space | Play / pause |
+| Left / Right | Single frame step (auto-pauses) |
+| Up / Down | Jump 10% forward / back (auto-pauses) |
+| Home / End | Jump to first / last frame |
 
 ## Key Types
 
@@ -33,7 +62,7 @@ pub enum PipelineMessage {
 }
 ```
 
-The `Arc<Snapshot>` wrapping enables zero-copy fan-out. A `Snapshot` for 32K particles is ~500 KB; cloning it for each consumer would double memory traffic. With `Arc`, the router just increments a reference count.
+The `Arc<Snapshot>` wrapping enables zero-copy fan-out.
 
 ### DisplayFrame
 
@@ -41,45 +70,36 @@ The `Arc<Snapshot>` wrapping enables zero-copy fan-out. A `Snapshot` for 32K par
 pub struct DisplayFrame {
     pub positions: Vec<[f32; 3]>,
     pub colors: Vec<[f32; 3]>,
+    pub render_mode: RenderMode,
     pub step: usize,
     pub scale_factor: f64,
 }
 ```
 
-The precompute thread converts morphis `Vector<3>` positions and velocity-based colors into flat f32 arrays. The viewer thread never touches morphis types -- it just draws from flat arrays.
+The precompute thread converts morphis `Vector<3>` positions and velocity-based colors into flat f32 arrays, and tags the frame with its render mode. The viewer thread never touches morphis types.
 
-### SnapshotSender
+### ConsumerConfig
 
 ```rust
-pub struct SnapshotSender {
-    tx: SyncSender<PipelineMessage>,
+pub struct ConsumerConfig {
+    pub tx: SyncSender<PipelineMessage>,
+    pub droppable: bool,
 }
 ```
 
-The simulation's output interface. `send()` uses `try_send` (non-blocking, drops on full). `done()` uses blocking `send` to ensure the shutdown signal reaches the router.
+Controls whether the router blocks (disk) or drops (viewer) when the consumer's channel is full.
 
 ## Shutdown Ordering
 
 1. Simulation finishes its step loop, calls `sender.done()`
 2. Router receives `Done`, forwards to all consumers via blocking send, exits
-3. Disk writer receives `Done`, prints summary, exits
+3. Disk writer receives `Done`, exits
 4. Precompute thread receives `Done`, sends `ViewerMessage::Done`, exits
 5. Main thread viewer sees `Done` or user closes window, returns
 6. `main()` joins all handles
 
-If the user closes the viewer window early, the simulation and disk writer continue to completion. This is correct: closing the window should not abort a running simulation or discard unsaved data.
+Closing the viewer window early does not abort the simulation or discard unsaved data.
 
-## Playback
+## Progress Bars
 
-The playback viewer uses a loader thread that reads snapshots from disk, precomputes `DisplayFrame`s, and sends them via a bounded channel. The main thread collects all frames (with a progress bar) before starting the render loop. This ensures smooth playback with zero I/O during rendering.
-
-## Performance
-
-Measured at 32K particles, 50 steps:
-
-| Path | Time | Notes |
-|------|------|-------|
-| Observer + FileObserver (old) | 17.5 s | Sync writes block simulation |
-| Pipeline + disk writer (new) | 3.2 s | Writes on separate thread |
-
-The pipeline is **5.5x faster** with disk saving enabled because the simulation never waits for I/O. Without saving, the overhead of `Arc::new(snapshot)` is negligible compared to the simulation step cost.
+Headless and resume modes display two parallel progress bars (via indicatif `MultiProgress`): the simulation progress (cyan, with redshift/scale factor) and the disk writer progress (green, with snapshot count). The bars are vertically aligned.

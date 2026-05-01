@@ -83,7 +83,7 @@ $$
 
 where $Ψ(k) = ik / k^2 \, \hat{δ}(k)$ is the displacement field computed from a Gaussian random overdensity. The power spectrum uses the Eisenstein-Hu no-wiggle transfer function normalized by $σ_8$.
 
-**Implementation:** `physics::initial::zeldovich_init` returns `Particles` with morphis-native positions and momenta.
+**Implementation:** `scenes::cosmic_web::init::zeldovich_init` returns `Particles` with morphis-native positions and momenta. The Fourier amplitude per mode is $\sqrt{P(k) \cdot V_{\text{box}}}$ for an un-normalized FFT convention.
 
 ## Conservation
 

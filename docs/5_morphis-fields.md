@@ -193,22 +193,7 @@ This is more efficient than a general `MultiVector` field and enforces the algeb
 
 The `rotate_phase` method applies this pointwise: at each grid point, $(a + bI) \mapsto (a + bI)(\cos\theta + I\sin\theta)$. The angle field is a scalar `Field<D>`, computed from the dispersion relation or the gravitational potential as appropriate.
 
-In hermes, the split-step cycle for a single time step would be:
-
-```rust
-// Kinetic half-step in Fourier space
-let kinetic_angle = compute_dispersion(&grid, dt, hbar_eff, mass);
-let psi = psi.rotate_phase(&kinetic_angle);
-
-// Potential step: solve Poisson, rotate in real space
-let rho = psi.density(mass);
-let phi = (&rho * (4.0 * PI * G)).laplacian_inverse();
-let potential_angle = &phi * (-dt / hbar_eff);
-let psi = psi.rotate_phase(&potential_angle);
-
-// Kinetic half-step again
-let psi = psi.rotate_phase(&kinetic_angle);
-```
+This is implemented in `core::schrodinger_dynamics` as the `SchrodingerPoissonDynamics` integrator. The kinetic step FFTs the scalar and pseudoscalar components independently, applies the k-dependent phase rotation $θ = -ℓ k^2 Δt / (2m a^2)$, and IFFTs back. The potential step computes density $ρ = m|α|^2$, solves the Poisson equation via morphis's `laplacian_inverse`, and applies the real-space phase rotation $θ = -m Φ Δt / ℓ$.
 
 ## Boundary with Hermes
 
