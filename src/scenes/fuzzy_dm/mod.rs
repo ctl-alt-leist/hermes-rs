@@ -1,6 +1,6 @@
-//! Fuzzy dark matter scene: wavefunction in a periodic box.
+//! Fuzzy dark matter scene: even-subalgebra field in a periodic box.
 //!
-//! A single even-subalgebra wavefunction evolved by the Schrodinger-Poisson
+//! A single dark matter field α evolved by the Schrodinger-Poisson
 //! system. The lightest field-theoretic scene — validates the Content::Fields
 //! path through the full pipeline.
 
@@ -50,7 +50,7 @@ impl Scene for FuzzyDM {
             mass_alpha,
         };
 
-        let psi = init::random_density_field(
+        let alpha = init::random_density_field(
             &hermes_grid,
             cosmology,
             &params,
@@ -62,7 +62,7 @@ impl Scene for FuzzyDM {
 
         let field_state = FieldState {
             grid: morphis_grid,
-            psi: Some(psi),
+            alpha: Some(alpha),
             beta: None,
             gamma: None,
             params,

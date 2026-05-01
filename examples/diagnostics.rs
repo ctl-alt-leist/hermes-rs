@@ -602,7 +602,7 @@ fn test_6(report: &mut String, p: &DiagParams) {
     let psi = EvenField::from_fn(&p.morphis_grid, g, |_| (uniform, 0.0));
     let field_state = FieldState {
         grid: p.morphis_grid.clone(),
-        psi: Some(psi),
+        alpha: Some(psi),
         beta: None,
         gamma: None,
         params,
@@ -620,7 +620,7 @@ fn test_6(report: &mut String, p: &DiagParams) {
             .step(&mut content, &p.cosmology, a_prev, a_prev + da)
             .unwrap();
 
-        let psi_ref = content.fields().unwrap().psi.as_ref().unwrap();
+        let psi_ref = content.fields().unwrap().alpha.as_ref().unwrap();
         for m0 in 0..n {
             for m1 in 0..n {
                 for m2 in 0..n {
@@ -688,7 +688,7 @@ fn test_7(report: &mut String, p: &DiagParams) {
         });
         let field_state = FieldState {
             grid: p.morphis_grid.clone(),
-            psi: Some(psi),
+            alpha: Some(psi),
             beta: None,
             gamma: None,
             params,
@@ -706,7 +706,7 @@ fn test_7(report: &mut String, p: &DiagParams) {
         }
 
         // Extract Fourier amplitude at k0.
-        let psi_f = content.fields().unwrap().psi.as_ref().unwrap();
+        let psi_f = content.fields().unwrap().alpha.as_ref().unwrap();
         let rho_f = psi_f.density(p.mass);
         let mut delta_grid = Array3::<f64>::zeros((n, n, n));
         for m0 in 0..n {
@@ -822,7 +822,7 @@ fn test_8(report: &mut String, p: &DiagParams) {
 
     let field_state = FieldState {
         grid: p.morphis_grid.clone(),
-        psi: Some(psi),
+        alpha: Some(psi),
         beta: None,
         gamma: None,
         params,
@@ -849,7 +849,7 @@ fn test_8(report: &mut String, p: &DiagParams) {
         }
 
         let a_now = p.a_init + step as f64 * da;
-        let psi_r = content.fields().unwrap().psi.as_ref().unwrap();
+        let psi_r = content.fields().unwrap().alpha.as_ref().unwrap();
         let rho_f = psi_r.density(p.mass);
 
         let mut deltas: Vec<f64> = Vec::with_capacity(n * n * n);

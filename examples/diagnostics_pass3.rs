@@ -171,7 +171,7 @@ fn main() {
 
     let field_state = FieldState {
         grid: grid.clone(),
-        psi: Some(psi),
+        alpha: Some(psi),
         beta: None,
         gamma: None,
         params,
@@ -186,7 +186,7 @@ fn main() {
 
     // Print initial state.
     {
-        let psi_ref = content.fields().unwrap().psi.as_ref().unwrap();
+        let psi_ref = content.fields().unwrap().alpha.as_ref().unwrap();
         let mean_ms = mean_mod_squared(psi_ref, n);
         let amp_now = extract_mode_amplitude(psi_ref, mass, rho_bar, &mode_idx, n);
 
@@ -209,7 +209,7 @@ fn main() {
         let dt = da / (a_mid * cosmology.hubble_parameter(a_mid));
 
         // Before stepping, extract the Poisson source to see what goes in.
-        let psi_ref = content.fields().unwrap().psi.as_ref().unwrap();
+        let psi_ref = content.fields().unwrap().alpha.as_ref().unwrap();
         let delta_hat_coeff = extract_delta_hat(psi_ref, mass, rho_bar, &mode_idx, n);
 
         // Analytic Phi_hat at this mode.
@@ -260,7 +260,7 @@ fn main() {
             .unwrap();
 
         // Extract state after step.
-        let psi_after = content.fields().unwrap().psi.as_ref().unwrap();
+        let psi_after = content.fields().unwrap().alpha.as_ref().unwrap();
         let mean_ms = mean_mod_squared(psi_after, n);
         let amp_now = extract_mode_amplitude(psi_after, mass, rho_bar, &mode_idx, n);
         let amp_lin = amp_init * cosmology.growth_factor(a_next) / growth_init;

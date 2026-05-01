@@ -61,8 +61,8 @@ impl Snapshot {
                 Self::capture_lightweight(particles, step, scale_factor)
             }
             Content::Fields(field_state) => {
-                let (density, n_cells) = if let Some(ref psi) = field_state.psi {
-                    let density_field = psi.density(field_state.params.mass_alpha);
+                let (density, n_cells) = if let Some(ref alpha) = field_state.alpha {
+                    let density_field = alpha.density(field_state.params.mass_alpha);
                     let n = field_state.grid.n_cells;
                     let mut density = Vec::with_capacity(n * n * n);
                     for val in density_field.data.iter() {

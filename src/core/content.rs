@@ -60,13 +60,13 @@ impl Content {
     }
 }
 
-/// Field-theoretic state: wavefunctions and bivector fields.
+/// Field-theoretic state: even-subalgebra fields and bivector fields.
 pub struct FieldState {
     /// Morphis grid for spectral operations.
     pub grid: morphis::grid::Grid<3>,
-    /// Dark matter wavefunction (even subalgebra: scalar + pseudoscalar).
-    pub psi: Option<EvenField<3>>,
-    /// Baryon wavefunction (future).
+    /// Dark matter wavefunction α (even subalgebra: scalar + pseudoscalar).
+    pub alpha: Option<EvenField<3>>,
+    /// Baryon field (future).
     pub beta: Option<EvenField<3>>,
     /// Electromagnetic bivector field (future).
     pub gamma: Option<Field<3>>,

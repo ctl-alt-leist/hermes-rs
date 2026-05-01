@@ -1,13 +1,13 @@
 //! Schrodinger-Poisson dynamics: split-step spectral integrator.
 //!
-//! Evolves a wavefunction psi in G^+ (even subalgebra) under
+//! Evolves the dark matter field α in G^+ (even subalgebra) under
 //! self-gravity via the symmetric split-step method:
 //!
-//!   1. Kinetic half-step (Fourier space): phase rotation by -ell |k|^2 dt / (2m)
-//!   2. Potential full step (real space): Poisson solve, phase rotation by -m Phi dt / ell
+//!   1. Kinetic half-step (Fourier space): phase rotation by -ℓ |k|² dt / (2m a²)
+//!   2. Potential full step (real space): Poisson solve, phase rotation by -m Φ dt / ℓ
 //!   3. Kinetic half-step (repeat step 1)
 //!
-//! The kinetic step uses FFT to transform the wavefunction components
+//! The kinetic step uses FFT to transform the field components
 //! to Fourier space, applies the k-dependent phase rotation, and
 //! transforms back. The potential step uses morphis's laplacian_inverse
 //! for the Poisson solve.
@@ -53,8 +53,8 @@ impl Dynamics for SchrodingerPoissonDynamics {
             HermesError::Config("Schrodinger dynamics requires field content".to_string())
         })?;
 
-        let psi = fields.psi.as_mut().ok_or_else(|| {
-            HermesError::Config("Schrodinger dynamics requires psi wavefunction".to_string())
+        let alpha = fields.alpha.as_mut().ok_or_else(|| {
+            HermesError::Config("Schrodinger dynamics requires alpha field".to_string())
         })?;
 
         let scale_factor = (scale_factor_prev + scale_factor_next) / 2.0;
@@ -66,23 +66,31 @@ impl Dynamics for SchrodingerPoissonDynamics {
         let density_mean = cosmology.density_matter();
 
         // 1. Kinetic half-step in Fourier space.
-        kinetic_step(psi, &fields.grid, ell, mass, scale_factor, dt / 2.0);
+        kinetic_step(alpha, &fields.grid, ell, mass, scale_factor, dt / 2.0);
 
         // 2. Potential full step in real space.
-        potential_step(psi, &fields.grid, ell, mass, density_mean, scale_factor, dt);
+        potential_step(
+            alpha,
+            &fields.grid,
+            ell,
+            mass,
+            density_mean,
+            scale_factor,
+            dt,
+        );
 
         // 3. Kinetic half-step in Fourier space.
-        kinetic_step(psi, &fields.grid, ell, mass, scale_factor, dt / 2.0);
+        kinetic_step(alpha, &fields.grid, ell, mass, scale_factor, dt / 2.0);
 
         Ok(())
     }
 }
 
-/// Kinetic half-step: FFT psi, rotate by exp(I * theta(k)), IFFT.
+/// Kinetic half-step: FFT α, rotate by exp(I θ(k)), IFFT.
 ///
-/// theta(k) = -ell |k|^2 dt / (2m a^2)
+/// θ(k) = -ℓ |k|² dt / (2m a²)
 pub fn kinetic_step(
-    psi: &mut morphis::even_field::EvenField<3>,
+    alpha: &mut morphis::even_field::EvenField<3>,
     grid: &morphis::grid::Grid<3>,
     ell: f64,
     mass: f64,
@@ -93,8 +101,8 @@ pub fn kinetic_step(
     let n_complex = n / 2 + 1;
 
     // FFT both components to Fourier space.
-    let scalar_hat = fft_3d(&psi.scalar, n);
-    let pseudo_hat = fft_3d(&psi.pseudoscalar, n);
+    let scalar_hat = fft_3d(&alpha.scalar, n);
+    let pseudo_hat = fft_3d(&alpha.pseudoscalar, n);
 
     // Apply phase rotation in k-space: (a + bI) * (cos theta + sin theta I)
     let mut result_scalar_hat = Array3::<Complex64>::zeros((n, n, n_complex));
@@ -123,13 +131,13 @@ pub fn kinetic_step(
     }
 
     // IFFT back to real space.
-    psi.scalar = ifft_3d(&result_scalar_hat, n);
-    psi.pseudoscalar = ifft_3d(&result_pseudo_hat, n);
+    alpha.scalar = ifft_3d(&result_scalar_hat, n);
+    alpha.pseudoscalar = ifft_3d(&result_pseudo_hat, n);
 }
 
 /// Potential full step: compute density, Poisson solve, phase rotation.
 pub fn potential_step(
-    psi: &mut morphis::even_field::EvenField<3>,
+    alpha: &mut morphis::even_field::EvenField<3>,
     grid: &morphis::grid::Grid<3>,
     ell: f64,
     mass: f64,
@@ -138,7 +146,7 @@ pub fn potential_step(
     dt: f64,
 ) {
     // Density: rho = m * (a^2 + b^2)
-    let rho = psi.density(mass);
+    let rho = alpha.density(mass);
 
     // Overdensity: delta = rho / rho_bar - 1
     let mut overdensity = &rho * (1.0 / density_mean);
@@ -154,14 +162,14 @@ pub fn potential_step(
 
     // Phase rotation: theta = -m * Phi * dt / ell
     let angle = &phi * (-mass * dt / ell);
-    *psi = psi.rotate_phase(&angle);
+    *alpha = alpha.rotate_phase(&angle);
 }
 
 // ============================================================================
 // Madelung velocity extraction
 // ============================================================================
 
-/// Extract the velocity field from a wavefunction via the wavefunction-gradient form.
+/// Extract the velocity field from the dark matter field via the field-gradient form.
 ///
 /// Computes v_d = (ℓ / (m |α|²)) Im(ᾱ ∇_d α) for each spatial direction,
 /// where ᾱ is the even-subalgebra conjugate (s - pI) and ∇_d α is
@@ -170,7 +178,7 @@ pub fn potential_step(
 /// This avoids the phase branch cut that makes the naive
 /// v = (ℓ/m) ∇ arg(α) form unreliable when the phase exceeds 2π.
 pub fn extract_velocity(
-    psi: &morphis::even_field::EvenField<3>,
+    alpha: &morphis::even_field::EvenField<3>,
     grid: &morphis::grid::Grid<3>,
     ell: f64,
     mass: f64,
@@ -178,8 +186,8 @@ pub fn extract_velocity(
     let n = grid.n_cells;
     let n_complex = n / 2 + 1;
 
-    let scalar_hat = fft_3d(&psi.scalar, n);
-    let pseudo_hat = fft_3d(&psi.pseudoscalar, n);
+    let scalar_hat = fft_3d(&alpha.scalar, n);
+    let pseudo_hat = fft_3d(&alpha.pseudoscalar, n);
 
     let mut velocity: [ndarray::ArrayD<f64>; 3] =
         std::array::from_fn(|_| ndarray::ArrayD::zeros(ndarray::IxDyn(&[n, n, n])));
@@ -215,8 +223,11 @@ pub fn extract_velocity(
         let v_d = velocity[d]
             .as_slice_mut()
             .expect("velocity array not contiguous");
-        let s = psi.scalar.as_slice().expect("scalar not contiguous");
-        let p = psi.pseudoscalar.as_slice().expect("pseudo not contiguous");
+        let s = alpha.scalar.as_slice().expect("scalar not contiguous");
+        let p = alpha
+            .pseudoscalar
+            .as_slice()
+            .expect("pseudo not contiguous");
         let ds_slice = ds.as_slice().expect("ds not contiguous");
         let dp_slice = dp.as_slice().expect("dp not contiguous");
 

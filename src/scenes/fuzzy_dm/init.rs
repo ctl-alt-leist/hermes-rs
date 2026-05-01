@@ -1,9 +1,9 @@
 //! Fuzzy dark matter initial conditions.
 //!
-//! Zel'dovich initialization converted to wavefunction form via the
-//! inverse Madelung transformation:
+//! Density and velocity fields converted to the even-subalgebra
+//! representation via the inverse Madelung transformation:
 //!
-//!   alpha(x) = sqrt(rho(x) / m) * exp(I * m * v(x) . x / ell)
+//!   α(x) = sqrt(ρ(x) / m) * exp(I * m * φ_v(x) / ℓ)
 
 use morphis::even_field::EvenField;
 use std::f64::consts::PI;
