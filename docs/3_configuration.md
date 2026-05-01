@@ -19,7 +19,7 @@ omega_m        = 0.315       # total matter density parameter
 omega_b        = 0.0493      # baryon density parameter
 omega_r        = 9.15e-5     # radiation density parameter
 omega_k        = 0.0         # spatial curvature parameter
-omega_lambda   = 0.6849085   # vacuum energy (cosmological constant)
+omega_v   = 0.6849085   # vacuum energy (cosmological constant)
 sigma_8        = 0.811       # RMS fluctuation amplitude at 8 h^-1 Mpc
 spectral_index = 0.965       # primordial power spectrum slope n_s
 
@@ -44,7 +44,7 @@ snapshot_interval = 10       # diagnostics every N steps
 The cosmology section is validated at load time:
 
 - `hubble`, `omega_m`, `omega_b`, `sigma_8` must be positive
-- `omega_lambda`, `omega_r` must be non-negative
+- `omega_v`, `omega_r` must be non-negative
 - `omega_b <= omega_m` (baryons can't exceed total matter)
 - $Ω_Λ + Ω_k + Ω_m + Ω_r = 1$ within $10^{-6}$
 
@@ -76,7 +76,7 @@ omega_m      = 1.0
 omega_b      = 0.05
 omega_r      = 0.0
 omega_k      = 0.0
-omega_lambda = 0.0
+omega_v = 0.0
 sigma_8      = 0.811
 spectral_index = 1.0
 ```

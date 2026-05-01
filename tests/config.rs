@@ -33,7 +33,7 @@ fn partial_override_merges_correctly() {
         r#"
         [cosmology]
         omega_m = 0.30
-        omega_lambda = 0.6999085
+        omega_v = 0.6999085
 
         [simulation]
         n_grid = 128

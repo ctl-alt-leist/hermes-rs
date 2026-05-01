@@ -277,7 +277,7 @@ fn validation_rejects_omega_b_exceeding_omega_m() {
 #[test]
 fn validation_rejects_nonunit_density_sum() {
     let cosmo = Cosmology {
-        omega_lambda: 0.0,
+        omega_v: 0.0,
         ..planck_2018()
     };
     assert!(cosmo.validate().is_err());

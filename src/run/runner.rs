@@ -22,6 +22,10 @@ pub fn run(cli: &Cli) -> Result<(), HermesError> {
         return run_playback(dir, cli);
     }
 
+    if let Some(ref dir) = cli.resume {
+        return run_resume(dir, cli);
+    }
+
     // Look up scene first so its defaults can be merged into config.
     let scene = scene_by_name(&cli.scene)?;
     let config = load_config(cli, scene.default_overrides())?;
@@ -252,6 +256,172 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     let _ = router_handle.join();
     for h in handles {
         let _ = h.join();
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Resume: continue from the last snapshot
+// ============================================================================
+
+fn run_resume(dir: &str, cli: &Cli) -> Result<(), HermesError> {
+    use crate::io::snapshot::load_snapshot;
+
+    // Find and load the last snapshot.
+    let paths = pipeline::find_snapshot_paths(dir);
+    let last_path = paths
+        .last()
+        .ok_or_else(|| HermesError::Config(format!("no snapshots found in {dir}/")))?;
+
+    let snapshot = load_snapshot(last_path)?;
+    let particles = snapshot
+        .to_particles()
+        .ok_or_else(|| HermesError::Config("resume requires particle content".to_string()))?;
+
+    let a_start = snapshot.scale_factor;
+
+    if !cli.quiet {
+        println!(
+            "Resuming from {} (step {}, a = {:.4}, z = {:.1})",
+            last_path.display(),
+            snapshot.step,
+            a_start,
+            1.0 / a_start - 1.0,
+        );
+    }
+
+    // Build config. The scale_factor_range starts from the snapshot's a.
+    // The user provides the final a and n_steps via config/CLI.
+    let scene = scene_by_name(&cli.scene)?;
+    let mut config = load_config(cli, scene.default_overrides())?;
+
+    // Override the initial scale factor to the snapshot's value.
+    config.time.scale_factor_range[0] = a_start;
+
+    if !cli.quiet {
+        println!(
+            "Evolving a = {:.4} → {:.4} in {} steps ({})",
+            config.time.scale_factor_initial(),
+            config.time.scale_factor_final(),
+            config.time.n_steps,
+            config.time.scale_factor_stepping,
+        );
+        println!();
+    }
+
+    let start_step = snapshot.step;
+
+    let mut sim = crate::core::simulation::Simulation::resume_particles(
+        particles,
+        a_start,
+        start_step,
+        config.clone(),
+    )?;
+
+    // Save to the same directory we resumed from (unless --save overrides).
+    let save_dir = if cli.no_save {
+        None
+    } else {
+        match &cli.save {
+            Some(Some(d)) => Some(d.clone()),
+            _ => Some(dir.to_string()),
+        }
+    };
+    let quiet = cli.quiet;
+    let total_steps = config.time.n_steps;
+
+    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(512);
+    let sender = SnapshotSender::new(sim_tx);
+
+    use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+    let multi = MultiProgress::new();
+
+    let mut consumer_senders: Vec<pipeline::ConsumerConfig> = Vec::new();
+    let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
+
+    let sim_bar = if !quiet {
+        let bar = multi.add(ProgressBar::new(total_steps as u64));
+        bar.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.cyan} [{elapsed_precise}] [{bar:40.cyan/dark.grey}] step {pos}/{len} a={msg} ({eta} remaining)",
+            )
+            .unwrap()
+            .progress_chars("=> "),
+        );
+        Some(bar)
+    } else {
+        None
+    };
+
+    if let Some(ref dir) = save_dir {
+        if !quiet {
+            println!("Saving snapshots to {dir}/");
+        }
+        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(512);
+        consumer_senders.push(pipeline::ConsumerConfig {
+            tx: disk_tx,
+            droppable: false,
+        });
+
+        let disk_progress = if !quiet {
+            let write_interval = config.output.write_interval.max(1);
+            let total_snapshots = total_steps / write_interval + 1;
+            let bar = multi.add(ProgressBar::new(total_snapshots as u64));
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "{spinner:.green}            [{bar:40.green/dark.grey}] {pos}/{len} snapshots saved",
+                )
+                .unwrap()
+                .progress_chars("=> "),
+            );
+            Some(bar)
+        } else {
+            None
+        };
+
+        let dir_owned = dir.clone();
+        handles.push(spawn_disk_writer(disk_rx, dir_owned, disk_progress));
+    }
+
+    let router_handle = spawn_router(router_rx, consumer_senders);
+    let run_start = Instant::now();
+
+    let sim_handle = thread::Builder::new()
+        .name("simulation".to_string())
+        .spawn(
+            move || -> Result<crate::core::simulation::Simulation, HermesError> {
+                if !quiet {
+                    let progress_bar = sim_bar.unwrap();
+                    sim.run_into_pipeline(&sender, |step, scale_factor| {
+                        progress_bar.set_position(step as u64);
+                        progress_bar.set_message(format!("{scale_factor:.4}"));
+                    })?;
+                    progress_bar.finish_and_clear();
+                } else {
+                    sim.run_into_pipeline(&sender, |_, _| {})?;
+                }
+
+                Ok(sim)
+            },
+        )
+        .expect("failed to spawn simulation thread");
+
+    let sim = sim_handle.join().expect("simulation thread panicked")?;
+    let run_time = run_start.elapsed();
+
+    let _ = router_handle.join();
+    for h in handles {
+        let _ = h.join();
+    }
+
+    if !quiet {
+        println!(
+            "Completed {} steps in {:.2}s ({:.1} ms/step)",
+            sim.step,
+            run_time.as_secs_f64(),
+            run_time.as_secs_f64() * 1000.0 / sim.step as f64,
+        );
     }
 
     Ok(())

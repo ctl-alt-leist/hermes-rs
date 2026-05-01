@@ -53,6 +53,10 @@ pub struct Cli {
     #[arg(long)]
     pub grid: Option<usize>,
 
+    /// Resume simulation from the last snapshot in a directory.
+    #[arg(long)]
+    pub resume: Option<String>,
+
     /// Suppress terminal output.
     #[arg(short, long)]
     pub quiet: bool,

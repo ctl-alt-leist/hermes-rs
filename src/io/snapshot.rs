@@ -180,6 +180,29 @@ impl Snapshot {
         }
     }
 
+    /// Reconstruct a Particles object from a particle snapshot.
+    ///
+    /// Returns None if the snapshot contains field content.
+    pub fn to_particles(&self) -> Option<Particles> {
+        match &self.content {
+            SnapshotContent::Particles {
+                positions,
+                momenta,
+                mass_particle,
+            } => {
+                let n = positions.len();
+                let mut particles = Particles::zeros(n, *mass_particle);
+                for (p, (pos, mom)) in positions.iter().zip(momenta.iter()).enumerate() {
+                    particles.set_position(p, pos);
+                    particles.set_momentum(p, mom);
+                }
+
+                Some(particles)
+            }
+            _ => None,
+        }
+    }
+
     /// Convert to serializable disk format.
     pub fn to_disk(&self) -> SnapshotOnDisk {
         let content = match &self.content {

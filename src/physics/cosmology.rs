@@ -36,8 +36,8 @@ pub struct Cosmology {
     pub omega_r: f64,
     /// Spatial curvature parameter Ω_k.
     pub omega_k: f64,
-    /// Vacuum energy density parameter Ω_Λ (cosmological constant).
-    pub omega_lambda: f64,
+    /// Vacuum energy density parameter Ω_v (cosmological constant).
+    pub omega_v: f64,
     /// RMS matter fluctuation amplitude in 8 h⁻¹ Mpc spheres.
     pub sigma_8: f64,
     /// Spectral index of the primordial power spectrum.
@@ -71,10 +71,10 @@ impl Cosmology {
                 self.omega_b, self.omega_m
             )));
         }
-        if self.omega_lambda < 0.0 {
+        if self.omega_v < 0.0 {
             return Err(HermesError::Cosmology(format!(
-                "omega_lambda must be non-negative, got {}",
-                self.omega_lambda
+                "omega_v must be non-negative, got {}",
+                self.omega_v
             )));
         }
         if self.omega_r < 0.0 {
@@ -90,7 +90,7 @@ impl Cosmology {
             )));
         }
 
-        let total = self.omega_lambda + self.omega_k + self.omega_m + self.omega_r;
+        let total = self.omega_v + self.omega_k + self.omega_m + self.omega_r;
         if (total - 1.0).abs() > 1e-6 {
             return Err(HermesError::Cosmology(format!(
                 "density parameters must sum to 1: Ω_Λ + Ω_k + Ω_m + Ω_r = {total:.10}"
@@ -145,7 +145,7 @@ impl Cosmology {
         let a3 = a2 * a;
         let a4 = a3 * a;
 
-        (self.omega_lambda + self.omega_k / a2 + self.omega_m / a3 + self.omega_r / a4).sqrt()
+        (self.omega_v + self.omega_k / a2 + self.omega_m / a3 + self.omega_r / a4).sqrt()
     }
 
     /// Hubble parameter H(a) in Gyr⁻¹.
@@ -245,7 +245,7 @@ pub fn planck_2018() -> Cosmology {
         omega_b: 0.0493,
         omega_r: 9.15e-5,
         omega_k: 0.0,
-        omega_lambda: 0.6849085,
+        omega_v: 0.6849085,
         sigma_8: 0.811,
         spectral_index: 0.965,
     }
@@ -267,7 +267,7 @@ pub fn einstein_de_sitter() -> Cosmology {
         omega_b: 0.05,
         omega_r: 0.0,
         omega_k: 0.0,
-        omega_lambda: 0.0,
+        omega_v: 0.0,
         sigma_8: 0.811,
         spectral_index: 1.0,
     }
@@ -279,7 +279,7 @@ pub fn einstein_de_sitter() -> Cosmology {
 
 /// Carroll, Press & Turner (1992) growth factor (unnormalized).
 fn growth_factor_unnormalized(cosmo: &Cosmology, a: f64) -> f64 {
-    let omega_a = cosmo.omega_m / (cosmo.omega_m + cosmo.omega_lambda * a * a * a);
+    let omega_a = cosmo.omega_m / (cosmo.omega_m + cosmo.omega_v * a * a * a);
     let lambda_a = 1.0 - omega_a;
 
     (5.0 / 2.0) * omega_a * a
