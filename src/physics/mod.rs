@@ -8,3 +8,4 @@ pub mod initial;
 pub mod integrator;
 pub mod particles;
 pub mod poisson;
+pub mod spectral;

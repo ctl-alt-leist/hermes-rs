@@ -17,7 +17,6 @@ use std::f64::consts::PI;
 use morphis::field::Field;
 use morphis::metric;
 use ndarray::Array3;
-use ndrustfft::{FftHandler, R2cFftHandler, ndfft, ndfft_r2c, ndifft, ndifft_r2c};
 use num_complex::Complex64;
 
 use crate::core::content::Content;
@@ -25,6 +24,7 @@ use crate::core::dynamics::Dynamics;
 use crate::error::HermesError;
 use crate::physics::constants::G as GRAV;
 use crate::physics::cosmology::Cosmology;
+use crate::physics::spectral::{fft_3d_dyn, ifft_3d_dyn};
 
 /// Schrodinger-Poisson dynamics for wavefunction dark matter.
 pub struct SchrodingerPoissonDynamics;
@@ -101,8 +101,8 @@ pub fn kinetic_step(
     let n_complex = n / 2 + 1;
 
     // FFT both components to Fourier space.
-    let scalar_hat = fft_3d(&alpha.scalar, n);
-    let pseudo_hat = fft_3d(&alpha.pseudoscalar, n);
+    let scalar_hat = fft_3d_dyn(&alpha.scalar, n);
+    let pseudo_hat = fft_3d_dyn(&alpha.pseudoscalar, n);
 
     // Apply phase rotation in k-space: (a + bI) * (cos theta + sin theta I)
     let mut result_scalar_hat = Array3::<Complex64>::zeros((n, n, n_complex));
@@ -131,8 +131,8 @@ pub fn kinetic_step(
     }
 
     // IFFT back to real space.
-    alpha.scalar = ifft_3d(&result_scalar_hat, n);
-    alpha.pseudoscalar = ifft_3d(&result_pseudo_hat, n);
+    alpha.scalar = ifft_3d_dyn(&result_scalar_hat, n);
+    alpha.pseudoscalar = ifft_3d_dyn(&result_pseudo_hat, n);
 }
 
 /// Potential full step: compute density, Poisson solve, phase rotation.
@@ -145,19 +145,13 @@ pub fn potential_step(
     scale_factor: f64,
     dt: f64,
 ) {
-    // Density: rho = m * (a^2 + b^2)
+    // Density: ρ = m (a² + b��)
     let rho = alpha.density(mass);
 
-    // Overdensity: delta = rho / rho_bar - 1
-    let mut overdensity = &rho * (1.0 / density_mean);
-    // Subtract 1 pointwise.
-    let _n = grid.n_cells;
-    let ones = Field::scalar_field(grid, metric::euclidean::<3>(), |_| 1.0);
-    overdensity = &overdensity - &ones;
-
-    // Poisson solve: Phi = (4 pi G rho_bar a^2 * delta).laplacian_inverse()
-    let prefactor = 4.0 * PI * GRAV * density_mean * scale_factor * scale_factor;
-    let source = &overdensity * prefactor;
+    // Poisson source: ∇²Φ = 4πG a² (ρ - ρ̄)
+    let rho_bar_field = Field::scalar_field(grid, metric::euclidean::<3>(), |_| density_mean);
+    let poisson_coupling = 4.0 * PI * GRAV * scale_factor * scale_factor;
+    let source = &(&rho - &rho_bar_field) * poisson_coupling;
     let phi = source.laplacian_inverse();
 
     // Phase rotation: theta = -m * Phi * dt / ell
@@ -169,124 +163,29 @@ pub fn potential_step(
 // Madelung velocity extraction
 // ============================================================================
 
-/// Extract the velocity field from the dark matter field via the field-gradient form.
+/// Extract the velocity field from the dark matter field via the Madelung form.
 ///
-/// Computes v_d = (ℓ / (m |α|²)) Im(ᾱ ∇_d α) for each spatial direction,
-/// where ᾱ is the even-subalgebra conjugate (s - pI) and ∇_d α is
-/// the spectral gradient along direction d.
+/// Delegates to morphis's `madelung_velocity`, which computes
+/// v_d = (ν / |α|²) (a ∂_d b - b ∂_d a) spectrally for each direction,
+/// avoiding the phase branch cut of ∇ arg(α).
 ///
-/// This avoids the phase branch cut that makes the naive
-/// v = (ℓ/m) ∇ arg(α) form unreliable when the phase exceeds 2π.
+/// Returns raw arrays for compatibility with the snapshot and
+/// visualization pipeline. The morphis Field<3> is extracted into
+/// three scalar component arrays.
 pub fn extract_velocity(
     alpha: &morphis::even_field::EvenField<3>,
-    grid: &morphis::grid::Grid<3>,
+    _grid: &morphis::grid::Grid<3>,
     ell: f64,
     mass: f64,
 ) -> [ndarray::ArrayD<f64>; 3] {
-    let n = grid.n_cells;
-    let n_complex = n / 2 + 1;
+    let nu = ell / mass;
+    let v_field = alpha.madelung_velocity(nu);
+    let n = alpha.grid.n_cells;
 
-    let scalar_hat = fft_3d(&alpha.scalar, n);
-    let pseudo_hat = fft_3d(&alpha.pseudoscalar, n);
-
-    let mut velocity: [ndarray::ArrayD<f64>; 3] =
-        std::array::from_fn(|_| ndarray::ArrayD::zeros(ndarray::IxDyn(&[n, n, n])));
-
-    #[allow(clippy::needless_range_loop)]
-    for d in 0..3 {
-        // Spectral derivative: multiply by i * k_d.
-        let mut ds_hat = Array3::<Complex64>::zeros((n, n, n_complex));
-        let mut dp_hat = Array3::<Complex64>::zeros((n, n, n_complex));
-
-        for m0 in 0..n {
-            let kx = grid.wavenumber(m0);
-            for m1 in 0..n {
-                let ky = grid.wavenumber(m1);
-                for m2 in 0..n_complex {
-                    let kz = grid.wavenumber(m2);
-                    let kd = match d {
-                        0 => kx,
-                        1 => ky,
-                        _ => kz,
-                    };
-                    let ik = Complex64::new(0.0, kd);
-                    ds_hat[[m0, m1, m2]] = scalar_hat[[m0, m1, m2]] * ik;
-                    dp_hat[[m0, m1, m2]] = pseudo_hat[[m0, m1, m2]] * ik;
-                }
-            }
-        }
-
-        let ds = ifft_3d(&ds_hat, n);
-        let dp = ifft_3d(&dp_hat, n);
-
-        // v_d = (ell / (m |alpha|^2)) * (scalar * dp - pseudo * ds)
-        let v_d = velocity[d]
-            .as_slice_mut()
-            .expect("velocity array not contiguous");
-        let s = alpha.scalar.as_slice().expect("scalar not contiguous");
-        let p = alpha
-            .pseudoscalar
-            .as_slice()
-            .expect("pseudo not contiguous");
-        let ds_slice = ds.as_slice().expect("ds not contiguous");
-        let dp_slice = dp.as_slice().expect("dp not contiguous");
-
-        for k in 0..v_d.len() {
-            let mod_sq = s[k] * s[k] + p[k] * p[k];
-            let im_part = s[k] * dp_slice[k] - p[k] * ds_slice[k];
-            v_d[k] = (ell / mass) * im_part / mod_sq;
-        }
-    }
-
-    velocity
-}
-
-// ============================================================================
-// FFT helpers for EvenField components
-// ============================================================================
-
-/// Forward 3D R2C FFT on an ndarray.
-pub fn fft_3d(data: &ndarray::ArrayD<f64>, n: usize) -> Array3<Complex64> {
-    let n_complex = n / 2 + 1;
-
-    // Reshape to Array3 for ndrustfft.
-    let data_3d = data
-        .view()
-        .into_shape_with_order((n, n, n))
-        .expect("data shape mismatch");
-
-    let handler_r2c = R2cFftHandler::new(n);
-    let handler_c2c_1 = FftHandler::new(n);
-    let handler_c2c_0 = FftHandler::new(n);
-
-    let mut complex = Array3::<Complex64>::zeros((n, n, n_complex));
-    ndfft_r2c(&data_3d, &mut complex, &handler_r2c, 2);
-
-    let mut scratch = complex.clone();
-    ndfft(&complex, &mut scratch, &handler_c2c_1, 1);
-    complex.assign(&scratch);
-    ndfft(&complex, &mut scratch, &handler_c2c_0, 0);
-    complex.assign(&scratch);
-
-    complex
-}
-
-/// Inverse 3D C2R FFT, returning an ndarray::ArrayD.
-pub fn ifft_3d(complex: &Array3<Complex64>, n: usize) -> ndarray::ArrayD<f64> {
-    let handler_c2c_0 = FftHandler::new(n);
-    let handler_c2c_1 = FftHandler::new(n);
-    let handler_r2c = R2cFftHandler::new(n);
-
-    let mut work = complex.clone();
-    let mut scratch = work.clone();
-
-    ndifft(&work, &mut scratch, &handler_c2c_0, 0);
-    work.assign(&scratch);
-    ndifft(&work, &mut scratch, &handler_c2c_1, 1);
-    work.assign(&scratch);
-
-    let mut real = Array3::<f64>::zeros((n, n, n));
-    ndifft_r2c(&work, &mut real, &handler_r2c, 2);
-
-    real.into_dyn()
+    std::array::from_fn(|d| {
+        let component = v_field.component_field(&[d]);
+        let mut out = ndarray::ArrayD::zeros(ndarray::IxDyn(&[n, n, n]));
+        out.assign(&component.data);
+        out
+    })
 }
