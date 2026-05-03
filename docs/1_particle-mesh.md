@@ -3,7 +3,7 @@
 The particle-mesh (PM) method computes gravitational forces by depositing particle masses onto a grid, solving the Poisson equation in Fourier space, and interpolating the resulting force field back to particle positions. It is the simplest method that does real cosmological physics and the natural foundation for the HCD framework's scale-0 dynamics.
 
 <figure style="text-align: center; margin: 2em auto;">
-  <img src="../figures/snapshots/cosmic-web-early.png" alt="Cosmic web particles at intermediate redshift" style="display: block; margin: 0 auto; width: 60%; max-width: 60%;">
+  <img src="../figures/snapshots/cosmic-web-pm-early.png" alt="Cosmic web particles at intermediate redshift" style="display: block; margin: 0 auto; width: 60%; max-width: 60%;">
   <figcaption style="margin: 0.5em auto 0 auto; font-style: italic; text-align: justify; width: 80%; max-width: 80%;">
     Particle-mesh simulation at intermediate redshift. Particles have begun moving off their initial lattice positions under gravitational attraction, with early clustering visible.
   </figcaption>
@@ -90,7 +90,7 @@ $$
 
 where $Ψ(k) = ik / k^2  \  \hat{δ}(k)$ is the displacement field computed from a Gaussian random overdensity. The power spectrum uses the Eisenstein-Hu no-wiggle transfer function normalized by $σ_8$.
 
-**Implementation:** `scenes::cosmic_web::init::zeldovich_init` returns `Particles` with morphis-native positions and momenta. The Fourier amplitude per mode is $\sqrt{P(k) \cdot V_{\text{box}}}$ for an un-normalized FFT convention.
+**Implementation:** `scenes::cosmic_web_pm::init::zeldovich_init` returns `Particles` with morphis-native positions and momenta. The Fourier amplitude per mode is $\sqrt{P(k) \cdot V_{\text{box}}}$ for an un-normalized FFT convention.
 
 ## Conservation
 

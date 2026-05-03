@@ -1,4 +1,4 @@
-//! Fuzzy dark matter scene: even-subalgebra field in a periodic box.
+//! Cosmic web field scene: even-subalgebra field in a periodic box.
 //!
 //! A single dark matter field α evolved by the Schrodinger-Poisson
 //! system. The lightest field-theoretic scene — validates the Content::Fields
@@ -19,12 +19,12 @@ use crate::scenes::Scene;
 
 const SCENE_DEFAULTS: &str = include_str!("defaults.toml");
 
-/// Fuzzy dark matter: wavefunction + self-gravity.
-pub struct FuzzyDM;
+/// Cosmic web via Schrodinger-Poisson field theory.
+pub struct CosmicWebField;
 
-impl Scene for FuzzyDM {
+impl Scene for CosmicWebField {
     fn name(&self) -> &str {
-        "fuzzy-dm"
+        "cosmic-web-field"
     }
 
     fn default_overrides(&self) -> Option<toml::Value> {

@@ -36,9 +36,9 @@ The content abstraction (Particles / Fields / Mixed) allows both modes to coexis
 | PM dynamics | `core::pm_dynamics` | Complete |
 | Schrodinger-Poisson dynamics | `core::schrodinger_dynamics` | Complete |
 | Simulation driver | `core::simulation` | Complete |
-| Cosmic web scene (PM) | `scenes::cosmic_web` | Complete |
-| Galaxy group scene (PM) | `scenes::galaxy_group` | Complete |
-| Fuzzy dark matter scene (SP) | `scenes::fuzzy_dm` | Complete |
+| Cosmic web scene (PM) | `scenes::cosmic_web_pm` | Complete |
+| Cosmic web scene (field) | `scenes::cosmic_web_field` | Complete |
+| Galaxy group scene (PM) | `scenes::galaxy_group_pm` | Complete |
 | Pipeline threading | `run::pipeline` | Complete |
 | Snapshot I/O (bincode) | `io::snapshot` | Complete |
 | Observer pattern | `io::observer` | Complete |
@@ -94,9 +94,9 @@ src/
     runner.rs         mode routing (headless, live, playback, record, resume)
     pipeline.rs       threaded pipeline: router, disk writer, precompute, viewer
   scenes/             each a subdirectory with init.rs + defaults.toml
-    cosmic_web/       Zel'dovich PM in a 100 Mpc periodic box (default)
-    galaxy_group/     3 colliding NFW halos in an 8 Mpc box
-    fuzzy_dm/         Schrodinger-Poisson wavefunction in a 10 Mpc box
+    cosmic_web_pm/    Zel'dovich PM in a 100 Mpc periodic box (default)
+    cosmic_web_field/ Schrodinger-Poisson wavefunction in a 10 Mpc box
+    galaxy_group_pm/  3 colliding NFW halos in an 8 Mpc box
   visuals/            (#[cfg(feature = "vis")])
     viewer.rs         static 3D particle viewer (kiss3d)
     plots.rs          density slices, P(k), conservation plots (plotters)

@@ -1,7 +1,7 @@
 //! Measure delta_rms and delta_max from saved snapshots.
 //!
 //! Usage:
-//!   cargo run --example measure_growth --release -- data/fuzzy-dm-growing
+//!   cargo run --example measure_growth --release -- data/cosmic-web-field-growing
 
 use hermes_rs::io::snapshot::{SnapshotContent, load_snapshot};
 use hermes_rs::run::pipeline::find_snapshot_paths;

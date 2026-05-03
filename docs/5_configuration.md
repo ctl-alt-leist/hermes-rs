@@ -73,7 +73,7 @@ The cosmology section is validated at load time:
 
 ## Scene Defaults
 
-Each scene provides a `defaults.toml` that overrides only what differs from the global defaults. The cosmic-web scene sets 64^3 resolution and the z=49 starting point. The fuzzy-dm scene sets "random" spectrum and linear stepping. Scene defaults are merged between the global defaults and the user config file.
+Each scene provides a `defaults.toml` that overrides only what differs from the global defaults. The cosmic-web-pm scene sets 64^3 resolution and the z=49 starting point. The cosmic-web-field scene sets "random" spectrum and linear stepping. Scene defaults are merged between the global defaults and the user config file.
 
 ## CLI Flags
 
@@ -96,7 +96,7 @@ scale_factor_range = [0.5, 1.5]
 n_steps = 200
 ```
 
-Run with: `hermes --scene cosmic-web configs/my-run.local.toml`
+Run with: `hermes --scene cosmic-web-pm configs/my-run.local.toml`
 
 ## Implementation
 

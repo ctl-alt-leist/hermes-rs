@@ -1,4 +1,4 @@
-//! Galaxy group scene: multiple colliding NFW halos.
+//! Cosmic web scene: Zel'dovich PM simulation in a periodic box.
 
 pub mod init;
 
@@ -13,25 +13,16 @@ use crate::scenes::Scene;
 
 const SCENE_DEFAULTS: &str = include_str!("defaults.toml");
 
-/// Galaxy group formation: colliding NFW halos.
-pub struct GalaxyGroup;
+/// Zel'dovich PM simulation in a periodic cosmological box.
+pub struct CosmicWebPM;
 
-impl Scene for GalaxyGroup {
+impl Scene for CosmicWebPM {
     fn name(&self) -> &str {
-        "galaxy-group"
+        "cosmic-web-pm"
     }
 
     fn default_overrides(&self) -> Option<toml::Value> {
         toml::from_str(SCENE_DEFAULTS).ok()
-    }
-
-    fn validate(&self, config: &Configuration) -> Result<(), HermesError> {
-        if config.simulation.box_length > 10_000.0 {
-            return Err(HermesError::Config(
-                "galaxy-group scene expects box_length <= 10 Mpc (10000 kpc)".to_string(),
-            ));
-        }
-        Ok(())
     }
 
     fn initialize(
@@ -42,7 +33,7 @@ impl Scene for GalaxyGroup {
     ) -> Result<(Content, Box<dyn Dynamics>), HermesError> {
         let grid = Grid::new(config.simulation.n_cells(), config.simulation.box_length);
 
-        let particles = init::colliding_halos_init(
+        let particles = init::zeldovich_init(
             config.simulation.n_particles,
             &grid,
             cosmology,

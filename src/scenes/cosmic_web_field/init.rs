@@ -1,4 +1,4 @@
-//! Fuzzy dark matter initial conditions.
+//! Cosmic web field initial conditions.
 //!
 //! Density and velocity fields converted to the even-subalgebra
 //! representation via the inverse Madelung transformation:
@@ -21,7 +21,7 @@ use crate::error::HermesError;
 use crate::physics::cosmology::Cosmology;
 use crate::physics::grid::Grid as HermesGrid;
 use crate::physics::spectral::{fft_3d, ifft_3d};
-use crate::scenes::cosmic_web::init::power_spectrum;
+use crate::scenes::cosmic_web_pm::init::power_spectrum;
 
 /// Generate Zel'dovich initial conditions as a wavefunction.
 pub fn zeldovich_wavefunction(

@@ -10,7 +10,7 @@ pub struct Cli {
     pub config_file: Option<String>,
 
     /// Simulation scene.
-    #[arg(long, default_value = "cosmic-web")]
+    #[arg(long, default_value = "cosmic-web-pm")]
     pub scene: String,
 
     /// Open live 3D viewer during simulation (requires --features vis).

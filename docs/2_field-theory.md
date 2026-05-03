@@ -4,7 +4,7 @@ The field-theoretic sector of hermes uses the morphis library's field abstractio
 
 | Early (z ~ 10) | Late (z ~ 0) |
 |:-:|:-:|
-| ![Fuzzy DM early](../figures/snapshots/fuzzy-dm-early.png) | ![Fuzzy DM late](../figures/snapshots/fuzzy-dm-late.png) |
+| ![Cosmic web field early](../figures/snapshots/cosmic-web-field-early.png) | ![Cosmic web field late](../figures/snapshots/cosmic-web-field-late.png) |
 
 The fuzzy-DM scene: volumetric rendering of the dark matter field density $|\alpha|^2$ at early and late times. Overdensities concentrate under self-gravity, with quantum pressure preventing collapse below the de Broglie scale.
 

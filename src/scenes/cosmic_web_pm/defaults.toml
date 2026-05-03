@@ -1,4 +1,4 @@
-# Cosmic web: Zel'dovich PM in a 100 Mpc periodic box.
+# Cosmic web (PM): Zel'dovich PM in a 100 Mpc periodic box.
 # Needs 64^3 for adequate PM resolution at this box size.
 
 [simulation]

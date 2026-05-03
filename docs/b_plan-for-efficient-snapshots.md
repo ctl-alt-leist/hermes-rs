@@ -1,3 +1,6 @@
+
+CLAUDE: We'll spend more time focusing on the efficiency aspect of this only after we've unified the engine framework. However, as we go, feel free to recognize efficiencies we could take, or implement anything here that makes sense. Otherwise don't focus too much on this.
+
 # Plan for Efficient Snapshots
 
 ## The Problem

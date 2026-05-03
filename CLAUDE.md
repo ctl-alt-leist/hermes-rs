@@ -60,9 +60,9 @@ src/
     runner.rs         mode routing (headless, live, playback, record, resume)
     pipeline.rs       threaded pipeline: router, disk writer, precompute, viewer
   scenes/             each a subdirectory with init.rs + defaults.toml
-    cosmic_web/       Zel'dovich PM in a 100 Mpc periodic box (default)
-    galaxy_group/     3 colliding NFW halos in an 8 Mpc box
-    fuzzy_dm/         Schrodinger-Poisson wavefunction in a 10 Mpc box
+    cosmic_web_pm/    Zel'dovich PM in a 100 Mpc periodic box (default)
+    cosmic_web_field/ Schrodinger-Poisson wavefunction in a 10 Mpc box
+    galaxy_group_pm/  3 colliding NFW halos in an 8 Mpc box
   visuals/            (#[cfg(feature = "vis")])
     viewer.rs         static 3D particle viewer (kiss3d)
     plots.rs          density slices, P(k), conservation plots (plotters)
@@ -100,7 +100,7 @@ Internal units: kpc, M_☉, Gyr, eV ($k_B = 1$). Matches the plexis sibling proj
 
 ## File Naming
 
-Non-code files (configs, snapshots, output) use hyphens: `snapshot-00000.bin`, `cosmic-web`. Rust source files use underscores per Rust convention. User config overrides use `.local.toml` extension (gitignored).
+Non-code files (configs, snapshots, output) use hyphens: `snapshot-00000.bin`, `cosmic-web-pm`. Rust source files use underscores per Rust convention. User config overrides use `.local.toml` extension (gitignored).
 
 ## Pipeline Architecture
 
