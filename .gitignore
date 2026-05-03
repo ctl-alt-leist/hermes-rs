@@ -5,3 +5,14 @@
 
 # User config overrides (tracked defaults live in configs/defaults.toml).
 *.local.toml
+
+# Archives and backups
+*.zip
+*.tar
+*.tar.gz
+*.tar.bz2
+*.7z
+*.rar
+
+# Editor / tool config
+.obsidian/
