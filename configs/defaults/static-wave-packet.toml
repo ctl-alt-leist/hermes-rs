@@ -1,0 +1,46 @@
+# Free wave packet in a static box.
+#
+# No gravity, no expansion. A Schrodinger field alpha
+# evolves freely: the wave packet disperses under the
+# kinetic term alone. Useful as a test bench for verifying
+# dispersion relations, norm conservation, and group velocity.
+
+# ── Ontology ─────────────────────────────────────────
+
+[ontology.spacetime]
+background = "static"
+
+[ontology.fields.alpha]
+grade        = [0, 3]  # even subalgebra
+mass         = 1.0
+length_scale = 1.0
+free         = "schrodinger"
+
+[ontology.lagrangian]
+# empty: free evolution, no couplings
+
+# ── Simulation ───────────────────────────────────────
+
+[simulation.grid]
+n_cells    = 128
+box_length = 1.0
+
+[simulation.time]
+time_range = [0.0, 10.0]
+stepping   = "linear"
+n_steps    = 1000
+
+[simulation.initialization]
+method   = "gaussian-packet"
+seed     = 42
+center   = [0.5, 0.5, 0.5]
+width    = 0.05
+momentum = [4.0, 0.0, 0.0]
+
+# ── Output ───────────────────────────────────────────
+
+[output.snapshots]
+interval = 10
+
+[output.diagnostics]
+interval = 50

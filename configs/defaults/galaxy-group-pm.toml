@@ -1,0 +1,46 @@
+# Galaxy group (particle-mesh).
+#
+# Three colliding NFW dark matter halos in an 8 Mpc box.
+# Initialized at z = 0 and evolved forward ~15 Gyr to watch
+# the merger unfold under Poisson gravity.
+
+# ── Ontology ─────────────────────────────────────────
+
+[ontology.spacetime]
+background     = "flrw"
+hubble         = 67.4    # km/s/Mpc
+omega_m        = 0.315
+omega_v        = 0.685
+omega_b        = 0.0493
+sigma_8        = 0.811
+spectral_index = 0.965
+
+[ontology.particles.dark_matter]
+count = 32768  # 32^3
+mass  = 1e10   # M_sun
+
+[ontology.lagrangian]
+gravity = true
+
+# ── Simulation ───────────────────────────────────────
+
+[simulation.grid]
+n_cells    = 32
+box_length = 8000.0  # kpc (8 Mpc)
+
+[simulation.time]
+scale_factor_range = [1.0, 2.5]  # z = 0 forward
+stepping           = "linear"
+n_steps            = 600
+
+[simulation.initialization]
+method = "nfw-group"
+seed   = 42
+
+# ── Output ───────────────────────────────────────────
+
+[output.snapshots]
+interval = 1
+
+[output.diagnostics]
+interval = 10

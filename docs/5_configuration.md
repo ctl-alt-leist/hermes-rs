@@ -46,7 +46,7 @@ perturbation_amplitude = 0.1      # RMS density perturbation at initialization
 band_pass              = [1.5, 0.5]  # [k_min / k_fundamental, k_max / k_nyquist]
 
 [field]
-length_scale = 2000.0    # ell/m: smoothing length ratio (kpc^2 / Gyr)
+length_scale = 2000.0    # l/m: diffusivity (kpc^2 / Gyr)
 mass         = 1e10      # field mass parameter (M_sun)
 
 [visualization]
@@ -96,7 +96,7 @@ scale_factor_range = [0.5, 1.5]
 n_steps = 200
 ```
 
-Run with: `hermes --scene cosmic-web-pm configs/my-run.local.toml`
+Run with: `cargo run --release -- --scene cosmic-web-pm configs/my-run.local.toml`
 
 ## Implementation
 

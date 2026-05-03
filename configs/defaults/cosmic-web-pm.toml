@@ -1,0 +1,47 @@
+# Cosmic web (particle-mesh).
+#
+# 64^3 dark matter particles in a 100 Mpc periodic box,
+# Zel'dovich-initialized from the CDM power spectrum at z ~ 49,
+# evolved to z = 0 under Poisson gravity.
+
+# ── Ontology ─────────────────────────────────────────
+
+[ontology.spacetime]
+background     = "flrw"
+hubble         = 67.4    # km/s/Mpc
+omega_m        = 0.315
+omega_v        = 0.685
+omega_b        = 0.0493
+sigma_8        = 0.811
+spectral_index = 0.965
+
+[ontology.particles.dark_matter]
+count = 262144  # 64^3
+mass  = 1e10    # M_sun
+
+[ontology.lagrangian]
+gravity = true
+
+# ── Simulation ───────────────────────────────────────
+
+[simulation.grid]
+n_cells    = 64
+box_length = 100000.0  # kpc (100 Mpc)
+
+[simulation.time]
+scale_factor_range = [0.02, 1.0]  # z ~ 49 to z = 0
+stepping           = "log"
+n_steps            = 300
+
+[simulation.initialization]
+method   = "zeldovich"
+seed     = 42
+spectrum = "eisenstein-hu"
+
+# ── Output ───────────────────────────────────────────
+
+[output.snapshots]
+interval = 1
+
+[output.diagnostics]
+interval = 10

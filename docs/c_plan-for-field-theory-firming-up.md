@@ -201,7 +201,7 @@ One subtlety specific to R2C transforms (which Hermes uses for field initializat
 
 ## 5 · Collapsing the unit system
 
-The Hermes code currently carries $ℓ$ and $m_α$ as separate parameters, but the dynamics depends only on the combination $ν \equiv ℓ \, / \, m_α$. This is the single physical scale of the dark-matter sector — a phase-space volume per time, with dimensions of $\mathrm{Mpc}^2 \, / \, \mathrm{Gyr}$ in our chosen units, equivalently a kinematic quantum diffusivity. Setting $m_α = 1$ in code units (which is just the choice of mass scale) and substituting, the evolution equation reduces to
+The Hermes code currently carries $ℓ$ and $m_α$ as separate parameters, but the dynamics depends only on the combination $ν \equiv ℓ \, / \, m_α$. This is the single physical scale of the dark-matter sector — a phase-space volume per time, with dimensions of $\mathrm{Mpc}^2 \, / \, \mathrm{Gyr}$ in our chosen units, equivalently a kinematic diffusivity. Setting $m_α = 1$ in code units (which is just the choice of mass scale) and substituting, the evolution equation reduces to
 
 $$
 \mathbb{1} \, ∂_t α \;=\; -\frac{ν}{2 \, a^2} \, ∇^2 α \;+\; \frac{Φ}{ν} \, α

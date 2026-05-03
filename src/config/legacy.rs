@@ -1,8 +1,8 @@
-/// Configuration loading and management.
+/// Legacy configuration types.
 ///
-/// Four-tier hierarchy: embedded defaults → scene defaults → optional config
-/// file → CLI overrides. Partial TOML files are deep-merged so that only the
-/// fields being overridden need to appear.
+/// These types parse the old flat TOML format (configs/defaults.toml).
+/// They remain in use by the existing simulation driver, scenes, and
+/// runner code. New code should use EngineConfig instead.
 use std::path::Path;
 
 use serde::Deserialize;
@@ -14,7 +14,7 @@ use crate::physics::cosmology::Cosmology;
 // Configuration types
 // ============================================================================
 
-/// Top-level configuration for a hermes simulation run.
+/// Top-level configuration for a hermes simulation run (legacy format).
 #[derive(Debug, Clone, Deserialize)]
 pub struct Configuration {
     pub cosmology: Cosmology,
@@ -32,9 +32,9 @@ pub struct Configuration {
 /// Spatial discretization parameters.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SimulationConfig {
-    /// Number of grid cells per side (total cells = n_grid³).
+    /// Number of grid cells per side (total cells = n_grid^3).
     pub n_grid: usize,
-    /// Number of particles per side (total particles = n_particles³).
+    /// Number of particles per side (total particles = n_particles^3).
     pub n_particles: usize,
     /// Comoving box side length in kpc.
     pub box_length: f64,
@@ -80,7 +80,6 @@ pub struct InitializationConfig {
     /// RMS amplitude of initial density perturbations.
     pub perturbation_amplitude: f64,
     /// Band-pass filter as [k_min / k_fundamental, k_max / k_nyquist].
-    /// Only used with "random" spectrum.
     pub band_pass: [f64; 2],
 }
 
@@ -97,10 +96,9 @@ impl Default for InitializationConfig {
 /// Field theory (Schrodinger-Poisson) parameters.
 #[derive(Debug, Clone, Deserialize)]
 pub struct FieldConfig {
-    /// Smoothing length ratio ℓ/m (kpc² / Gyr).
-    /// Controls the quantum Jeans length and de Broglie wavelength.
+    /// Smoothing length ratio l/m (kpc^2 / Gyr).
     pub length_scale: f64,
-    /// Field mass parameter (M_☉).
+    /// Field mass parameter (M_sun).
     pub mass: f64,
 }
 
@@ -182,7 +180,7 @@ impl VisualizationConfig {
 // Embedded defaults
 // ============================================================================
 
-const DEFAULTS_TOML: &str = include_str!("../configs/defaults.toml");
+const DEFAULTS_TOML: &str = include_str!("../../configs/defaults.toml");
 
 // ============================================================================
 // Loading
@@ -205,10 +203,6 @@ pub fn load_config(path: &Path) -> Result<Configuration, HermesError> {
 }
 
 /// Build a configuration from defaults with optional overrides.
-///
-/// The `config_file` override is applied first, then `overrides`. Both
-/// are deep-merged into the defaults so that only the fields being
-/// changed need to appear.
 pub fn build_configuration(
     config_file: Option<&toml::Value>,
     overrides: Option<&toml::Value>,
@@ -232,13 +226,7 @@ pub fn build_configuration(
     Ok(config)
 }
 
-// ============================================================================
-// Deep merge
-// ============================================================================
-
 /// Recursively merge `source` into `base`, overwriting leaf values.
-///
-/// Public for use by the runner's four-tier config merge.
 pub fn deep_merge_public(base: &mut toml::Value, source: &toml::Value) {
     deep_merge(base, source);
 }
