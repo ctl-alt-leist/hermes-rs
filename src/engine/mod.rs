@@ -44,10 +44,10 @@ impl Engine {
     pub fn step(&mut self, scale_factor: f64, dt: f64) -> Result<(), HermesError> {
         let cosmology = self.cosmology.clone();
 
-        // 1. Coupling half-steps (dt/2).
+        // 1. Opening coupling half-steps (dt/2).
         for coupling in &mut self.couplings {
             if let Some(ref cosmo) = cosmology {
-                coupling.half_step(&mut self.state, cosmo, scale_factor, dt / 2.0)?;
+                coupling.opening_half_step(&mut self.state, cosmo, scale_factor, dt / 2.0)?;
             }
         }
 
@@ -59,10 +59,10 @@ impl Engine {
             }
         }
 
-        // 3. Coupling half-steps (dt/2).
+        // 3. Closing coupling half-steps (dt/2).
         for coupling in &mut self.couplings {
             if let Some(ref cosmo) = cosmology {
-                coupling.half_step(&mut self.state, cosmo, scale_factor, dt / 2.0)?;
+                coupling.closing_half_step(&mut self.state, cosmo, scale_factor, dt / 2.0)?;
             }
         }
 

@@ -15,6 +15,8 @@ use morphis::field::Field;
 use morphis::metric;
 
 use crate::core::content::Content;
+use crate::engine::coupling::Coupling;
+use crate::engine::state::SimulationState;
 use crate::error::HermesError;
 use crate::physics::cic::{ParticleForces, assign_density, interpolate_force};
 use crate::physics::constants::G as GRAV;
@@ -254,4 +256,95 @@ pub fn field_potential_step(
 
     let angle = &phi * (-mass * dt / ell);
     *alpha = alpha.rotate_phase(&angle);
+}
+
+// ============================================================================
+// Coupling trait implementation
+// ============================================================================
+
+impl Coupling for PoissonGravity {
+    fn opening_half_step(
+        &mut self,
+        state: &mut SimulationState,
+        cosmology: &Cosmology,
+        scale_factor: f64,
+        dt_half: f64,
+    ) -> Result<(), HermesError> {
+        let density_mean = cosmology.density_matter();
+
+        // Apply gravity to each field species.
+        let morphis_grid = state.morphis_grid;
+        for field in state.fields.values_mut() {
+            field_potential_step(
+                &mut field.data,
+                &morphis_grid,
+                field.smoothing_length,
+                field.mass,
+                density_mean,
+                scale_factor,
+                dt_half,
+            );
+        }
+
+        // Particle gravity: kick with cached forces from previous closing half.
+        for particles in state.particles.values_mut() {
+            let forces = match self.forces_prev.take() {
+                Some(f) => f,
+                None => compute_particle_forces(
+                    particles,
+                    &mut self.solver,
+                    &self.grid,
+                    cosmology,
+                    scale_factor,
+                ),
+            };
+
+            let kick_factor = cosmology.kick_factor(scale_factor, scale_factor);
+            crate::physics::integrator::kick(particles, &forces, kick_factor * dt_half);
+            self.forces_prev = Some(forces);
+        }
+
+        Ok(())
+    }
+
+    fn closing_half_step(
+        &mut self,
+        state: &mut SimulationState,
+        cosmology: &Cosmology,
+        scale_factor: f64,
+        dt_half: f64,
+    ) -> Result<(), HermesError> {
+        let density_mean = cosmology.density_matter();
+
+        // Apply gravity to each field species (same as opening).
+        let morphis_grid = state.morphis_grid;
+        for field in state.fields.values_mut() {
+            field_potential_step(
+                &mut field.data,
+                &morphis_grid,
+                field.smoothing_length,
+                field.mass,
+                density_mean,
+                scale_factor,
+                dt_half,
+            );
+        }
+
+        // Particle gravity: recompute forces at new positions and kick.
+        for particles in state.particles.values_mut() {
+            let forces = compute_particle_forces(
+                particles,
+                &mut self.solver,
+                &self.grid,
+                cosmology,
+                scale_factor,
+            );
+
+            let kick_factor = cosmology.kick_factor(scale_factor, scale_factor);
+            crate::physics::integrator::kick(particles, &forces, kick_factor * dt_half);
+            self.forces_prev = Some(forces);
+        }
+
+        Ok(())
+    }
 }
