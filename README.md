@@ -31,8 +31,11 @@ cargo run --release --features vis -- --scene cosmic-web-pm
 # Run cosmic web field theory (Schrodinger-Poisson)
 cargo run --release --features vis -- --scene cosmic-web-field
 
-# Run galaxy group (3 colliding halos)
+# Run galaxy group (3 colliding halos, particles)
 cargo run --release --features vis -- --scene galaxy-group-pm
+
+# Run galaxy group (3 colliding halos, field theory)
+cargo run --release --features vis -- --scene galaxy-group-field
 
 # Play back saved snapshots
 cargo run --release --features vis -- --playback data/cosmic-web-pm --fps 30

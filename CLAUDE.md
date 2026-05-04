@@ -32,40 +32,51 @@ The Content abstraction (Particles / Fields / Mixed) with pluggable Dynamics let
 
 ```
 src/
-  algebra.rs          shared Euclidean 3-metric, morphis conversions
-  colormap.rs         density/velocity colormapping
-  config.rs           TOML configuration with deep merge
-  error.rs            HermesError enum
-  core/               simulation orchestration
-    content.rs        Content enum (Particles / Fields / Mixed)
-    dynamics.rs       Dynamics trait (pluggable step function)
-    pm_dynamics.rs    ParticleMeshDynamics (KDK + Poisson)
-    schrodinger_dynamics.rs  SchrodingerPoissonDynamics (split-step spectral)
-    simulation.rs     simulation driver (from_scene, from_config, resume)
-  physics/            physical models and solvers
-    constants.rs      physical constants (kpc, M_sun, Gyr, eV)
-    cosmology.rs      FLRW background, growth factor, kick/drift factors
-    grid.rs           periodic cubic grid geometry
-    field.rs          grade-0 and grade-1 fields with morphis extraction
-    particles.rs      SoA particle storage with morphis interface
-    cic.rs            cloud-in-cell mass assignment + force interpolation
-    poisson.rs        FFT Poisson solver (ndrustfft)
-    integrator.rs     symplectic KDK leapfrog
-    diagnostics.rs    conservation audits
+  algebra.rs            shared Euclidean 3-metric, morphis conversions
+  colormap.rs           density/velocity colormapping
+  error.rs              HermesError enum
+  config/               TOML configuration (three-tier: ontology/simulation/output)
+    ontology.rs         Ontology, Spacetime, ParticleSpecies, FieldSpecies, Lagrangian
+    simulation.rs       GridConfig, TimeConfig, InitializationConfig
+    output.rs           SnapshotsConfig, DiagnosticsConfig, LoggingConfig, DisplayConfig
+    legacy.rs           old Configuration type (migration period)
+  engine/               composable physics engine
+    state.rs            SimulationState: named maps of particles and fields
+    free/               FreeEvolution trait + per-species modules
+      schrodinger.rs    SchrodingerEvolution (split-step kinetic propagator)
+    coupling/           Coupling trait + cross-species modules
+      poisson.rs        PoissonGravity (shared Poisson solver for all species)
+  core/                 legacy simulation orchestration
+    content.rs          Content enum (Particles / Fields / Mixed)
+    dynamics.rs         Dynamics trait (pluggable step function)
+    pm_dynamics.rs      ParticleMeshDynamics (delegates to PoissonGravity)
+    schrodinger_dynamics.rs  SchrodingerPoissonDynamics (delegates to PoissonGravity)
+    simulation.rs       simulation driver (from_scene, from_config, resume)
+  physics/              physical models and solvers
+    constants.rs        physical constants (kpc, M_sun, Gyr, eV)
+    cosmology.rs        FLRW background, growth factor, kick/drift factors
+    grid.rs             periodic cubic grid geometry
+    field.rs            grade-0 and grade-1 fields with morphis extraction
+    particles.rs        SoA particle storage with morphis interface
+    cic.rs              cloud-in-cell mass assignment + force interpolation
+    poisson.rs          FFT Poisson solver (ndrustfft)
+    integrator.rs       symplectic KDK leapfrog
+    diagnostics.rs      conservation audits
   io/
-    snapshot.rs       Snapshot type, SnapshotContent enum, bincode serialization
-    observer.rs       Observer trait (legacy, used by tests)
+    snapshot.rs         Snapshot type, SnapshotContent enum, bincode serialization
+    observer.rs         Observer trait (legacy, used by tests)
   run/
-    cli.rs            clap-based CLI (--scene, --live, --playback, --resume)
-    runner.rs         mode routing (headless, live, playback, record, resume)
-    pipeline.rs       threaded pipeline: router, disk writer, precompute, viewer
-  scenes/             each a subdirectory with init.rs + defaults.toml
-    cosmic_web_pm/    Zel'dovich PM in a 100 Mpc periodic box (default)
-    cosmic_web_field/ Schrodinger-Poisson wavefunction in a 10 Mpc box
-    galaxy_group_pm/  3 colliding NFW halos in an 8 Mpc box
-  visuals/            (#[cfg(feature = "vis")])
-    viewer.rs         static 3D particle viewer (kiss3d)
-    plots.rs          density slices, P(k), conservation plots (plotters)
+    cli.rs              clap-based CLI (--scene, --live, --playback, --resume)
+    runner.rs           mode routing (headless, live, playback, record, resume)
+    pipeline.rs         threaded pipeline: router, disk writer, precompute, viewer
+  scenes/               each a subdirectory with init.rs + defaults.toml
+    cosmic_web_pm/      Zel'dovich PM in a 100 Mpc periodic box (default)
+    cosmic_web_field/   Schrodinger-Poisson wavefunction in a 10 Mpc box
+    galaxy_group_pm/    3 colliding NFW halos in an 8 Mpc box (particles)
+    galaxy_group_field/ 3 colliding NFW halos in an 8 Mpc box (field)
+  visuals/              (#[cfg(feature = "vis")])
+    viewer.rs           static 3D particle viewer (kiss3d)
+    plots.rs            density slices, P(k), conservation plots (plotters)
     volumetric_renderer.rs  additive-blended Gaussian point sprites for fields
 ```
 
@@ -108,7 +119,11 @@ Simulation, disk I/O, and visualization run on independent threads connected by 
 
 ## Configuration
 
-TOML-based, four-tier: embedded `configs/defaults.toml` → scene defaults → optional file override → CLI overrides. Partial files are deep-merged. Sections: `[cosmology]`, `[simulation]`, `[time]`, `[output]`, `[initialization]`, `[field]`, `[visualization]`.
+TOML-based with deep merge. Two config systems coexist during migration:
+
+**New (EngineConfig):** Three top-level containers: `[ontology]` (spacetime, particles, fields, lagrangian), `[simulation]` (grid, time, initialization), `[output]` (snapshots, diagnostics, logging, display). Base defaults in `configs/defaults/base.toml`, scene presets in `configs/defaults/<scene>.toml`.
+
+**Legacy (Configuration):** Flat sections `[cosmology]`, `[simulation]`, `[time]`, `[output]`, `[initialization]`, `[field]`, `[visualization]`. Still used by the old simulation driver and scenes. Embedded defaults in `configs/defaults.toml`.
 
 ## Testing
 
