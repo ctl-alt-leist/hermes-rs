@@ -15,9 +15,13 @@ use morphis::metric::euclidean;
 use hermes_rs::core::content::{Content, FieldParams, FieldState};
 use hermes_rs::core::dynamics::Dynamics;
 use hermes_rs::core::schrodinger_dynamics::{
-    SchrodingerPoissonDynamics, extract_velocity, kinetic_step, potential_step,
+    SchrodingerPoissonDynamics, extract_velocity, kinetic_step,
+};
+use hermes_rs::engine::coupling::poisson::{
+    PoissonGravity, field_potential_step as potential_step,
 };
 use hermes_rs::physics::cosmology::planck_2018;
+use hermes_rs::physics::grid::Grid as HermesGrid;
 
 fn approx_eq(a: f64, b: f64, tol: f64) {
     assert!(
@@ -726,7 +730,8 @@ fn cosmological_linear_growth() {
         params,
     };
     let mut content = Content::Fields(field_state);
-    let mut dynamics = SchrodingerPoissonDynamics::new();
+    let hermes_grid = HermesGrid::new(n, box_length);
+    let mut dynamics = SchrodingerPoissonDynamics::new(PoissonGravity::new(hermes_grid));
 
     let amp_initial = measure_mode_amplitude(
         content.fields().unwrap().alpha.as_ref().unwrap(),

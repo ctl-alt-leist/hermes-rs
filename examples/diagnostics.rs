@@ -19,8 +19,10 @@ use num_complex::Complex64;
 use hermes_rs::core::content::{Content, FieldParams, FieldState};
 use hermes_rs::core::dynamics::Dynamics;
 use hermes_rs::core::schrodinger_dynamics::{SchrodingerPoissonDynamics, kinetic_step};
+use hermes_rs::engine::coupling::poisson::PoissonGravity;
 use hermes_rs::physics::constants::G as GRAV;
 use hermes_rs::physics::cosmology::{Cosmology, planck_2018};
+use hermes_rs::physics::grid::Grid as HermesGrid;
 use hermes_rs::physics::spectral::{fft_3d_dyn as fft_3d, ifft_3d_dyn as ifft_3d};
 
 // ============================================================================
@@ -608,7 +610,8 @@ fn test_6(report: &mut String, p: &DiagParams) {
     };
 
     let mut content = Content::Fields(field_state);
-    let mut dynamics = SchrodingerPoissonDynamics::new();
+    let hermes_grid = HermesGrid::new(p.n, p.box_length);
+    let mut dynamics = SchrodingerPoissonDynamics::new(PoissonGravity::new(hermes_grid));
     let da = (p.a_final - p.a_init) / 2000.0;
     let target = uniform * uniform;
     let mut max_dev = 0.0_f64;
@@ -693,7 +696,8 @@ fn test_7(report: &mut String, p: &DiagParams) {
             params,
         };
         let mut content = Content::Fields(field_state);
-        let mut dynamics = SchrodingerPoissonDynamics::new();
+        let hermes_grid = HermesGrid::new(p.n, p.box_length);
+        let mut dynamics = SchrodingerPoissonDynamics::new(PoissonGravity::new(hermes_grid));
 
         let mut a_current = p.a_init;
         for step in 0..n_steps {
@@ -827,7 +831,8 @@ fn test_8(report: &mut String, p: &DiagParams) {
         params,
     };
     let mut content = Content::Fields(field_state);
-    let mut dynamics = SchrodingerPoissonDynamics::new();
+    let hermes_grid = HermesGrid::new(p.n, p.box_length);
+    let mut dynamics = SchrodingerPoissonDynamics::new(PoissonGravity::new(hermes_grid));
 
     writeln!(
         report,

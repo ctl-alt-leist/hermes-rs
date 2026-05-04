@@ -12,6 +12,7 @@ use crate::config::Configuration;
 use crate::core::content::{Content, FieldParams, FieldState};
 use crate::core::dynamics::Dynamics;
 use crate::core::schrodinger_dynamics::SchrodingerPoissonDynamics;
+use crate::engine::coupling::poisson::PoissonGravity;
 use crate::error::HermesError;
 use crate::physics::cosmology::Cosmology;
 use crate::physics::grid::Grid as HermesGrid;
@@ -78,7 +79,8 @@ impl Scene for CosmicWebField {
             params,
         };
 
-        let dynamics = SchrodingerPoissonDynamics::new();
+        let gravity = PoissonGravity::new(hermes_grid);
+        let dynamics = SchrodingerPoissonDynamics::new(gravity);
 
         Ok((Content::Fields(field_state), Box::new(dynamics)))
     }
