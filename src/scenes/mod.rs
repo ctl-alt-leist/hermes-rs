@@ -7,6 +7,7 @@
 
 pub mod cosmic_web_field;
 pub mod cosmic_web_pm;
+pub mod galaxy_group_field;
 pub mod galaxy_group_pm;
 
 use crate::config::Configuration;
@@ -51,6 +52,7 @@ pub fn scene_by_name(name: &str) -> Result<Box<dyn Scene>, HermesError> {
         "cosmic-web-pm" => Ok(Box::new(cosmic_web_pm::CosmicWebPM)),
         "cosmic-web-field" => Ok(Box::new(cosmic_web_field::CosmicWebField)),
         "galaxy-group-pm" => Ok(Box::new(galaxy_group_pm::GalaxyGroupPM)),
+        "galaxy-group-field" => Ok(Box::new(galaxy_group_field::GalaxyGroupField)),
         _ => Err(HermesError::Config(format!(
             "unknown scene: {name}. available: {}",
             available_scenes().join(", ")
@@ -60,5 +62,10 @@ pub fn scene_by_name(name: &str) -> Result<Box<dyn Scene>, HermesError> {
 
 /// List available scene names.
 pub fn available_scenes() -> Vec<&'static str> {
-    vec!["cosmic-web-pm", "cosmic-web-field", "galaxy-group-pm"]
+    vec![
+        "cosmic-web-pm",
+        "cosmic-web-field",
+        "galaxy-group-pm",
+        "galaxy-group-field",
+    ]
 }
