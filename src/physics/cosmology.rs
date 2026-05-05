@@ -234,6 +234,35 @@ impl Cosmology {
 }
 
 // ============================================================================
+// Conversion from EngineConfig
+// ============================================================================
+
+impl Cosmology {
+    /// Build a Cosmology from the new EngineConfig spacetime parameters.
+    ///
+    /// The EngineConfig stores H₀ in km/s/Mpc (e.g. 67.4); we convert
+    /// to the dimensionless h (0.674) used internally.
+    pub fn from_engine_config(config: &crate::config::EngineConfig) -> Result<Self, HermesError> {
+        let spacetime = &config.ontology.spacetime;
+
+        let hubble_kms = spacetime.hubble.ok_or_else(|| {
+            HermesError::Config("cosmology requires hubble parameter".to_string())
+        })?;
+
+        Ok(Self {
+            hubble: hubble_kms / 100.0,
+            omega_m: spacetime.omega_m.unwrap_or(0.315),
+            omega_b: spacetime.omega_b.unwrap_or(0.0493),
+            omega_r: spacetime.omega_r.unwrap_or(9.15e-5),
+            omega_k: spacetime.omega_k.unwrap_or(0.0),
+            omega_v: spacetime.omega_v.unwrap_or(0.685),
+            sigma_8: spacetime.sigma_8.unwrap_or(0.811),
+            spectral_index: spacetime.spectral_index.unwrap_or(0.965),
+        })
+    }
+}
+
+// ============================================================================
 // Factory functions
 // ============================================================================
 

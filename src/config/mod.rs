@@ -18,7 +18,7 @@ pub use ontology::{
     FieldGrade, FieldSpecies, Lagrangian, Ontology, ParticleSpecies, Spacetime, SpacetimeBackground,
 };
 pub use output::{DiagnosticsConfig, DisplayConfig, LoggingConfig, OutputBlock, SnapshotsConfig};
-pub use simulation::{GridConfig, InitializationConfig, SimulationBlock, TimeConfig};
+pub use simulation::{GridConfig, HaloSpec, InitializationConfig, SimulationBlock, TimeConfig};
 
 // Re-export legacy types so existing `use crate::config::*` still works.
 pub use legacy::{
@@ -61,7 +61,7 @@ impl EngineConfig {
 // Loading
 // ============================================================================
 
-const BASE_DEFAULTS_TOML: &str = include_str!("../../configs/defaults/base.toml");
+const BASE_DEFAULTS_TOML: &str = include_str!("base.toml");
 
 /// Load the base defaults as an EngineConfig.
 pub fn load_base_defaults() -> Result<EngineConfig, HermesError> {

@@ -10,7 +10,7 @@
 background     = "flrw"
 hubble         = 67.4    # km/s/Mpc
 omega_m        = 0.315
-omega_v        = 0.685
+omega_v        = 0.6849085
 omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965

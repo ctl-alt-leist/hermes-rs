@@ -26,7 +26,6 @@ use rand_chacha::ChaCha20Rng;
 use crate::core::content::FieldParams;
 use crate::physics::cosmology::Cosmology;
 use crate::physics::grid::Grid as HermesGrid;
-use crate::scenes::galaxy_group_pm::init::default_halo_configs;
 
 /// Generate colliding NFW halos as a wavefunction field.
 ///
@@ -39,8 +38,8 @@ pub fn colliding_halos_field(
     params: &FieldParams,
     _scale_factor_initial: f64,
     seed: u64,
+    halo_configs: &[super::nfw::HaloConfig],
 ) -> EvenField<3> {
-    let halo_configs = default_halo_configs();
     let n_halos = halo_configs.len();
 
     let n = grid.n_cells;

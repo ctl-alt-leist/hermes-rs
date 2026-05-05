@@ -16,6 +16,29 @@ use crate::run::pipeline::{
 };
 use crate::scenes::scene_by_name;
 
+use std::path::PathBuf;
+
+/// Resolve a scene argument to a TOML file path.
+///
+/// Tries, in order:
+///   1. The argument as-is (e.g. "scenes/cosmic-web-pm.toml")
+///   2. The argument with .toml appended (e.g. "scenes/cosmic-web-pm" → "scenes/cosmic-web-pm.toml")
+///
+/// Returns None if no file is found (falls back to legacy Scene trait).
+fn resolve_scene_toml(name: &str) -> Option<PathBuf> {
+    let path = PathBuf::from(name);
+    if path.exists() && path.extension().is_some() {
+        return Some(path);
+    }
+
+    let with_ext = PathBuf::from(format!("{name}.toml"));
+    if with_ext.exists() {
+        return Some(with_ext);
+    }
+
+    None
+}
+
 /// Run based on CLI arguments.
 pub fn run(cli: &Cli) -> Result<(), HermesError> {
     if let Some(ref dir) = cli.playback {
@@ -26,9 +49,27 @@ pub fn run(cli: &Cli) -> Result<(), HermesError> {
         return run_resume(dir, cli);
     }
 
-    // Look up scene first so its defaults can be merged into config.
-    let scene = scene_by_name(&cli.scene)?;
-    let config = load_config(cli, scene.default_overrides())?;
+    // Try the config-driven path first: scenes/<name>.toml.
+    // Fall back to the legacy Scene trait if no TOML file exists.
+    let config = if let Some(scene_path) = resolve_scene_toml(&cli.scene) {
+        let mut engine_config = crate::config::load_scene_config(&scene_path)?;
+
+        // Apply CLI overrides.
+        if let Some(steps) = cli.steps {
+            engine_config.simulation.time.n_steps = steps;
+        }
+        if let Some(grid) = cli.grid {
+            engine_config.simulation.grid.n_cells = grid;
+        }
+
+        let cosmology = crate::physics::cosmology::Cosmology::from_engine_config(&engine_config)?;
+
+        Configuration::from_engine_config(&engine_config, &cosmology)
+    } else {
+        // Legacy path: look up the Scene trait implementation.
+        let scene = scene_by_name(&cli.scene)?;
+        load_config(cli, scene.default_overrides())?
+    };
 
     if !cli.quiet {
         print_header(&config, cli);
@@ -50,6 +91,30 @@ pub fn run(cli: &Cli) -> Result<(), HermesError> {
 }
 
 // ============================================================================
+/// Build a Simulation from either the config-driven path (scenes/<name>.toml)
+/// or the legacy Scene trait path.
+fn build_simulation(
+    scene_name: &str,
+    config: Configuration,
+    seed: u64,
+) -> Result<crate::core::simulation::Simulation, HermesError> {
+    if let Some(scene_path) = resolve_scene_toml(scene_name) {
+        let mut engine_config = crate::config::load_scene_config(&scene_path)?;
+
+        // Transfer any overrides from the legacy config into the engine config.
+        engine_config.simulation.time.n_steps = config.time.n_steps;
+        engine_config.simulation.grid.n_cells = config.simulation.n_cells();
+        engine_config.simulation.grid.box_length = config.simulation.box_length;
+        engine_config.simulation.initialization.seed = seed;
+
+        crate::core::simulation::Simulation::from_engine_config(&engine_config)
+    } else {
+        let scene = scene_by_name(scene_name)?;
+        crate::core::simulation::Simulation::from_scene(&*scene, config, seed)
+    }
+}
+
+// ============================================================================
 // Headless: simulation on spawned thread, main blocks on join
 // ============================================================================
 
@@ -58,6 +123,15 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     let seed = cli.seed;
     let quiet = cli.quiet;
     let scene_name = cli.scene.clone();
+
+    // Write scene.toml into the output directory so --resume can find it.
+    if let Some(ref dir) = save_dir
+        && let Some(scene_path) = resolve_scene_toml(&scene_name)
+    {
+        let dest = PathBuf::from(dir).join("scene.toml");
+        std::fs::create_dir_all(dir).ok();
+        std::fs::copy(&scene_path, &dest).ok();
+    }
     let total_steps = config.time.n_steps;
     // Simulation → Router channel.
     let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(512);
@@ -127,9 +201,7 @@ fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
         .name("simulation".to_string())
         .spawn(
             move || -> Result<crate::core::simulation::Simulation, HermesError> {
-                let scene = scene_by_name(&scene_name)?;
-                let mut sim =
-                    crate::core::simulation::Simulation::from_scene(&*scene, config, seed)?;
+                let mut sim = build_simulation(&scene_name, config, seed)?;
 
                 if !quiet {
                     let progress_bar = sim_bar.unwrap();
@@ -240,8 +312,7 @@ fn run_live(config: Configuration, cli: &Cli) -> Result<(), HermesError> {
     let sim_handle = thread::Builder::new()
         .name("simulation".to_string())
         .spawn(move || -> Result<(), HermesError> {
-            let scene = scene_by_name(&scene_name)?;
-            let mut sim = crate::core::simulation::Simulation::from_scene(&*scene, config, seed)?;
+            let mut sim = build_simulation(&scene_name, config, seed)?;
             sim.run_into_pipeline(&sender, |_, _| {})?;
 
             Ok(())
@@ -291,13 +362,29 @@ fn run_resume(dir: &str, cli: &Cli) -> Result<(), HermesError> {
         );
     }
 
-    // Build config. The scale_factor_range starts from the snapshot's a.
-    // The user provides the final a and n_steps via config/CLI.
-    let scene = scene_by_name(&cli.scene)?;
-    let mut config = load_config(cli, scene.default_overrides())?;
+    // Load config from <dir>/scene.toml (written when the scene was saved).
+    // Falls back to the --scene flag or legacy path if not found.
+    let scene_toml_in_dir = PathBuf::from(dir).join("scene.toml");
+    let mut config = if scene_toml_in_dir.exists() {
+        let engine_config = crate::config::load_scene_config(&scene_toml_in_dir)?;
+        let cosmology = crate::physics::cosmology::Cosmology::from_engine_config(&engine_config)?;
+        Configuration::from_engine_config(&engine_config, &cosmology)
+    } else if let Some(toml_path) = resolve_scene_toml(&cli.scene) {
+        let engine_config = crate::config::load_scene_config(&toml_path)?;
+        let cosmology = crate::physics::cosmology::Cosmology::from_engine_config(&engine_config)?;
+        Configuration::from_engine_config(&engine_config, &cosmology)
+    } else {
+        let scene = scene_by_name(&cli.scene)?;
+        load_config(cli, scene.default_overrides())?
+    };
 
     // Override the initial scale factor to the snapshot's value.
     config.time.scale_factor_range[0] = a_start;
+
+    // --steps is required for resume: how many additional steps to run.
+    if let Some(steps) = cli.steps {
+        config.time.n_steps = steps;
+    }
 
     if !cli.quiet {
         println!(
@@ -320,13 +407,10 @@ fn run_resume(dir: &str, cli: &Cli) -> Result<(), HermesError> {
     )?;
 
     // Save to the same directory we resumed from (unless --save overrides).
-    let save_dir = if cli.no_save {
-        None
-    } else {
-        match &cli.save {
-            Some(Some(d)) => Some(d.clone()),
-            _ => Some(dir.to_string()),
-        }
+    let save_dir = match &cli.save {
+        Some(Some(d)) => Some(d.clone()),
+        Some(None) => Some(dir.to_string()),
+        None => None,
     };
     let quiet = cli.quiet;
     let total_steps = config.time.n_steps;
@@ -450,14 +534,19 @@ fn run_playback(dir: &str, cli: &Cli) -> Result<(), HermesError> {
             println!("Playback from {dir}/");
         }
 
-        // Playback doesn't run a simulation, so load default vis config.
-        // User can override via a config file argument.
-        let vis_config = if let Some(ref path) = cli.config_file {
-            let content = std::fs::read_to_string(path)?;
-            let val: toml::Value = toml::from_str(&content)
-                .map_err(|e| HermesError::Config(format!("failed to parse {path}: {e}")))?;
-            let config = crate::config::build_configuration(Some(&val), None)?;
-            config.visualization
+        // Infer scene TOML from data directory: <dir>.toml is the sibling config.
+        // Falls back to global defaults if no TOML is found.
+        let scene_toml = PathBuf::from(format!("{dir}.toml"));
+        let vis_config = if scene_toml.exists() {
+            let engine_config = crate::config::load_scene_config(&scene_toml)?;
+            let cosmology =
+                crate::physics::cosmology::Cosmology::from_engine_config(&engine_config)?;
+            Configuration::from_engine_config(&engine_config, &cosmology).visualization
+        } else if let Some(toml_path) = resolve_scene_toml(&cli.scene) {
+            let engine_config = crate::config::load_scene_config(&toml_path)?;
+            let cosmology =
+                crate::physics::cosmology::Cosmology::from_engine_config(&engine_config)?;
+            Configuration::from_engine_config(&engine_config, &cosmology).visualization
         } else {
             crate::config::VisualizationConfig::default()
         };
@@ -480,12 +569,12 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
         println!("Recording {total} frames to {output_path}...");
     }
 
-    // Load vis config for GIF parameters.
-    let vis = if let Some(ref path) = cli.config_file {
-        let content = std::fs::read_to_string(path)?;
-        let val: toml::Value = toml::from_str(&content)
-            .map_err(|e| HermesError::Config(format!("failed to parse {path}: {e}")))?;
-        crate::config::build_configuration(Some(&val), None)?.visualization
+    // Infer vis config from sibling TOML of the data directory.
+    let scene_toml = PathBuf::from(format!("{dir}.toml"));
+    let vis = if scene_toml.exists() {
+        let engine_config = crate::config::load_scene_config(&scene_toml)?;
+        let cosmology = crate::physics::cosmology::Cosmology::from_engine_config(&engine_config)?;
+        Configuration::from_engine_config(&engine_config, &cosmology).visualization
     } else {
         crate::config::VisualizationConfig::default()
     };
@@ -610,7 +699,7 @@ fn load_config(
     cli: &Cli,
     scene_defaults: Option<toml::Value>,
 ) -> Result<Configuration, HermesError> {
-    let file_override = if let Some(ref path) = cli.config_file {
+    let file_override = if let Some(ref path) = cli.config {
         let content = std::fs::read_to_string(path)?;
         let value: toml::Value = toml::from_str(&content)
             .map_err(|e| HermesError::Config(format!("failed to parse {path}: {e}")))?;
