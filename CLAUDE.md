@@ -62,6 +62,7 @@ src/
     poisson.rs          FFT Poisson solver (ndrustfft)
     integrator.rs       symplectic KDK leapfrog
     diagnostics.rs      conservation audits
+    spectral.rs         FFT wrappers (fft_3d, ifft_3d)
   io/
     snapshot.rs         Snapshot type, SnapshotContent enum, bincode serialization
     observer.rs         Observer trait (legacy, used by tests)
@@ -69,11 +70,12 @@ src/
     cli.rs              clap-based CLI (--scene, --live, --playback, --resume)
     runner.rs           mode routing (headless, live, playback, record, resume)
     pipeline.rs         threaded pipeline: router, disk writer, precompute, viewer
-  scenes/               each a subdirectory with init.rs + defaults.toml
-    cosmic_web_pm/      Zel'dovich PM in a 100 Mpc periodic box (default)
-    cosmic_web_field/   Schrodinger-Poisson wavefunction in a 10 Mpc box
-    galaxy_group_pm/    3 colliding NFW halos in an 8 Mpc box (particles)
-    galaxy_group_field/ 3 colliding NFW halos in an 8 Mpc box (field)
+  physics/initial/      initialization dispatched by config method string
+    zeldovich.rs        Zel'dovich particle init from CDM power spectrum
+    zeldovich_field.rs  Zel'dovich + random wavefunction init
+    nfw.rs              NFW halo particle sampling
+    nfw_field.rs        NFW halo plane-wave field init
+  scenes/               legacy Scene trait (fallback, being phased out)
   visuals/              (#[cfg(feature = "vis")])
     viewer.rs           static 3D particle viewer (kiss3d)
     plots.rs            density slices, P(k), conservation plots (plotters)
@@ -111,7 +113,7 @@ Internal units: kpc, M_☉, Gyr, eV ($k_B = 1$). Matches the plexis sibling proj
 
 ## File Naming
 
-Non-code files (configs, snapshots, output) use hyphens: `snapshot-00000.bin`, `cosmic-web-pm`. Rust source files use underscores per Rust convention. User config overrides use `.local.toml` extension (gitignored).
+Non-code files (scenes, snapshots, output) use hyphens: `snapshot-00000.bin`, `cosmic-web-pm`. Rust source files use underscores per Rust convention. Scene naming convention: `-pm` for particle-mesh, `-ft` for field theory.
 
 ## Pipeline Architecture
 
@@ -119,11 +121,11 @@ Simulation, disk I/O, and visualization run on independent threads connected by 
 
 ## Configuration
 
-TOML-based with deep merge. Two config systems coexist during migration:
+TOML-based with deep merge. Scene configs live in `scenes/*.toml` and define the full simulation. Base defaults are compiled in from `src/config/base.toml`.
 
-**New (EngineConfig):** Three top-level containers: `[ontology]` (spacetime, particles, fields, lagrangian), `[simulation]` (grid, time, initialization), `[output]` (snapshots, diagnostics, logging, display). Base defaults in `configs/defaults/base.toml`, scene presets in `configs/defaults/<scene>.toml`.
+**EngineConfig:** Three top-level containers: `[ontology]` (spacetime, particles, fields, lagrangian), `[simulation]` (grid, time, initialization), `[output]` (snapshots, diagnostics, logging, display). The CLI `--scene` flag points to any TOML file; the engine dispatches initialization by `[simulation.initialization.method]`.
 
-**Legacy (Configuration):** Flat sections `[cosmology]`, `[simulation]`, `[time]`, `[output]`, `[initialization]`, `[field]`, `[visualization]`. Still used by the old simulation driver and scenes. Embedded defaults in `configs/defaults.toml`.
+**Legacy (Configuration):** Flat sections still used by the simulation driver internals. Built automatically from EngineConfig at runtime.
 
 ## Testing
 

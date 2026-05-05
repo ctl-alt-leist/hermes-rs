@@ -12,42 +12,54 @@ Hermes is a cosmological simulation engine built on [morphis](https://github.com
 ## Features
 
 - **Particle-mesh N-body**: FFT-based Poisson gravity with cloud-in-cell mass assignment
-- **Schrodinger-Poisson field theory**: split-step spectral integrator for fuzzy dark matter in the even subalgebra
+- **Schrodinger-Poisson field theory**: split-step spectral integrator for dark matter in the even subalgebra
+- **Config-driven scenes**: simulations defined entirely by TOML files -- no code changes needed for new scenarios
 - **Content abstraction**: particles, fields, or both -- pluggable dynamics per content type
 - **Geometric algebra substrate**: all physical quantities are morphis objects -- positions, momenta, forces are grade-1 vectors; angular momentum is a grade-2 bivector; the dark matter field α is an even-subalgebra field
 - **Symplectic integration**: kick-drift-kick leapfrog (particles) and Strang splitting (fields) with cosmological step factors
 - **Pipeline architecture**: simulation, disk I/O, and visualization run on independent threads connected by bounded channels
 - **Volumetric rendering**: additive-blended Gaussian point sprites for field visualization; standard point rendering for particles
 - **Resume from snapshot**: continue a simulation from its last saved state with `--resume`
-- **TOML configuration**: four-tier hierarchy with deep merge (defaults, scene, user file, CLI)
 - **Snapshot I/O**: bincode serialization with morphis vector roundtrip fidelity
 
 ## Quick Start
 
 ```bash
-# Run the cosmic web (default scene, 64^3 particles)
-cargo run --release --features vis -- --scene cosmic-web-pm
+# Run the cosmic web (default scene, 64^3 particles, saves to scenes/cosmic-web-pm/)
+cargo run --release -- --scene scenes/cosmic-web-pm --save
 
 # Run cosmic web field theory (Schrodinger-Poisson)
-cargo run --release --features vis -- --scene cosmic-web-field
+cargo run --release -- --scene scenes/cosmic-web-ft --save
 
 # Run galaxy group (3 colliding halos, particles)
-cargo run --release --features vis -- --scene galaxy-group-pm
+cargo run --release -- --scene scenes/galaxy-group-pm --save
 
 # Run galaxy group (3 colliding halos, field theory)
-cargo run --release --features vis -- --scene galaxy-group-field
+cargo run --release -- --scene scenes/galaxy-group-ft --save
 
 # Play back saved snapshots
-cargo run --release --features vis -- --playback data/cosmic-web-pm --fps 30
+cargo run --release --features vis -- --playback scenes/cosmic-web-pm
 
 # Resume a simulation forward in time
-cargo run --release --features vis -- --resume data/cosmic-web-pm --scene cosmic-web-pm configs/resume.local.toml
+cargo run --release -- --resume scenes/cosmic-web-pm --steps 100 --save
 
 # See all options
 cargo run --release -- --help
 ```
 
 ## Scenes
+
+Scenes are TOML files that fully define a simulation: spacetime, species, initialization method, grid, and time stepping. They live in `scenes/` by default but can be anywhere.
+
+```bash
+# Point to any TOML file
+cargo run --release -- --scene path/to/my-experiment.toml --save
+
+# Create your own scene by copying and modifying an existing one
+cp scenes/cosmic-web-pm.toml scenes/my-custom-run.toml
+# edit scenes/my-custom-run.toml...
+cargo run --release -- --scene scenes/my-custom-run --save
+```
 
 ### Cosmic Web
 
@@ -70,24 +82,22 @@ cargo run --release -- --help
 ## CLI
 
 ```
-hermes [OPTIONS] [CONFIG_FILE]
-
-Arguments:
-  [CONFIG_FILE]        TOML config file (overrides defaults)
+hermes [OPTIONS]
 
 Options:
-  --scene <NAME>       Simulation scene [default: cosmic-web-pm]
+  --scene <PATH>       Scene config (.toml path, extension optional)
+                       [default: scenes/cosmic-web-pm]
+  --config <FILE>      Base config merged under the scene (optional)
+  --save [DIR]         Save snapshots (default: next to scene TOML)
   --live               Open live 3D viewer (requires --features vis)
-  --save [DIR]         Save snapshots (default: data/<scene>/)
-  --no-save            Don't save snapshots
-  --playback DIR       Play back saved snapshots
-  --resume DIR         Resume simulation from last snapshot in directory
-  --record FILE        Record playback as GIF
-  --fps N              Playback/recording framerate [default: 30]
-  --seed N             RNG seed [default: 42]
-  --steps N            Override time steps
-  --particles N        Override particles per side
-  --grid N             Override grid cells per side
+  --playback <DIR>     Play back saved snapshots (requires --features vis)
+  --resume <DIR>       Resume from last snapshot (reads scene.toml from dir)
+  --record <FILE>      Record playback as GIF
+  --fps <N>            Playback/recording framerate [default: 30]
+  --seed <N>           RNG seed [default: 42]
+  --steps <N>          Override time steps
+  --particles <N>      Override particles per side
+  --grid <N>           Override grid cells per side
   -q, --quiet          Suppress output
 ```
 
@@ -99,6 +109,7 @@ Options:
 - [HCD Context](docs/3_hcd-context.md) -- how hermes connects to the multi-scale framework
 - [Pipeline Architecture](docs/4_pipeline.md) -- threading, channels, and data flow
 - [Configuration](docs/5_configuration.md) -- TOML schema and config hierarchy
+- [Resolution Requirements](docs/6_resolution-requirements.md) -- grid and diffusivity constraints for accurate dynamics
 - [Unified Engine Plan](docs/a_plans-for-a-unified-engine.md) -- content-driven physics composition
 - [Efficient Snapshots Plan](docs/b_plan-for-efficient-snapshots.md) -- I/O bottleneck analysis
 
