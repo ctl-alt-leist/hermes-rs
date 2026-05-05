@@ -1,0 +1,65 @@
+# Multi-species cosmological simulation (aspirational).
+#
+# Dark matter particles, a dark matter wavefunction alpha,
+# a baryon field beta, and an electromagnetic bivector field gamma.
+# Gravity couples everything massive; electromagnetism couples
+# the baryons to the EM field.
+
+# ── Ontology ─────────────────────────────────────────
+
+[ontology.spacetime]
+background     = "flrw"
+hubble         = 67.4    # km/s/Mpc
+omega_m        = 0.315
+omega_v        = 0.685
+omega_b        = 0.0493
+sigma_8        = 0.811
+spectral_index = 0.965
+
+[ontology.particles.dark_matter]
+count = 262144  # 64^3
+mass  = 1e10    # M_sun
+
+[ontology.fields.alpha]
+grade        = [0, 3]    # even subalgebra
+mass         = 1e10      # M_sun
+length_scale = 2000.0    # kpc^2 / Gyr
+free         = "schrodinger"
+
+[ontology.fields.beta]
+grade        = [0, 3]    # even subalgebra (baryon fluid)
+mass         = 1e6       # M_sun
+length_scale = 500.0     # kpc^2 / Gyr
+free         = "euler"
+
+[ontology.fields.gamma]
+grade = 2  # bivector
+free  = "maxwell"
+
+[ontology.lagrangian]
+gravity         = true                 # universal: all massive species
+electromagnetic = ["beta", "gamma"]    # selective: charged species only
+
+# ── Simulation ───────────────────────────────────────
+
+[simulation.grid]
+n_cells    = 128
+box_length = 100000.0  # kpc (100 Mpc)
+
+[simulation.time]
+scale_factor_range = [0.02, 1.0]  # z ~ 49 to z = 0
+stepping           = "log"
+n_steps            = 500
+
+[simulation.initialization]
+method   = "zeldovich"
+seed     = 42
+spectrum = "eisenstein-hu"
+
+# ── Output ───────────────────────────────────────────
+
+[output.snapshots]
+interval = 1
+
+[output.diagnostics]
+interval = 10

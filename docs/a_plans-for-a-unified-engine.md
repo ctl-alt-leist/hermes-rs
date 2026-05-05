@@ -1,10 +1,21 @@
 # Unified Physics Engine
 
+CLAUDE: This set of notes (the unified engine) is really what we are putting our effort into. The other appendices are
+useful in terms of what is worth keeping in mind as we work.
+
+CLAUDE: One thing I'd like us to discuss before we work, and it isn't exacltly how it should be in these notes, but I
+really want to think of configuring the engine by imagining in principle, which the architecture of the code should then
+reflect, as what Lagrangian terms we include and we don't (the architecture should do this in a very efficient way
+computationally speaking, don't get too cute). There are of course all sorts of other configurations for the engine, but
+in terms of what physics we are simulating, this is sort of how I think about it. You'll see next that we are talking
+about doing gravity with a field, rather than a computation on the other items alone, and so this is relevant for that,
+as well of course as all the work we'll include with baryon physics and so on.
+
 ## Vision
 
 A simulation is defined by its content (what is in the box) and its physics (what laws act on it). The engine should not need to be told which scene it came from — it should look at what's in the snapshot, look at which physics modules are enabled, and evolve the system forward.
 
-The current architecture couples content to dynamics through the scene: cosmic-web produces particles and selects ParticleMeshDynamics, fuzzy-dm produces fields and selects SchrodingerPoissonDynamics. The scene is the matchmaker. The goal is to remove that coupling so the engine can operate on any content with any combination of physics.
+The current architecture couples content to dynamics through the scene: cosmic-web-pm produces particles and selects ParticleMeshDynamics, cosmic-web-field produces fields and selects SchrodingerPoissonDynamics. The scene is the matchmaker. The goal is to remove that coupling so the engine can operate on any content with any combination of physics.
 
 ## Content as State
 
@@ -54,6 +65,8 @@ Scenes become convenience presets that set content type, physics modules, and de
 
 ## Implications for Snapshots
 
+CLAUDE: This is getting close to what I want, but I'd rather it be more manifestly general than having to specify "content_type", and "particles", "fields", or "mixed". I'd like it to within the data specify (in a very efficient way) what the next chunk of data is going to be, particles or field and so on.
+
 The snapshot format needs to be self-describing. One approach:
 
 ```
@@ -74,6 +87,8 @@ For field content, the body must store the full wavefunction (both components of
 For particle content, positions and momenta suffice. The KDK leapfrog is self-starting from a single state (no need for two snapshots to infer momentum — momentum is stored directly as canonical momentum p = a² m dx/dt).
 
 ## Two-Snapshot Question
+
+CLAUDE: This was something I asked about, but it doesn't really seem relevant.
 
 Some integrators require information from two consecutive states to restart (e.g., Verlet without stored velocities, or methods that cache forces from the previous step). The current KDK leapfrog caches `forces_prev` for reuse, but this is an optimization, not a requirement — the first step of a resumed run simply recomputes forces from scratch, which is correct (just slightly less efficient for one step).
 
@@ -121,7 +136,7 @@ gravity    = true          # couples all massive fields
 electromagnetic = false    # couples charged fields only
 ```
 
-The engine iterates over registered fields, applies their free dynamics, then applies interaction terms. A simulation with only α and gravity recovers the current fuzzy-dm scene. A simulation with particles and gravity recovers the current cosmic-web scene. Adding β or γ extends the physics without changing the engine.
+The engine iterates over registered fields, applies their free dynamics, then applies interaction terms. A simulation with only α and gravity recovers the current cosmic-web-field scene. A simulation with particles and gravity recovers the current cosmic-web-pm scene. Adding β or γ extends the physics without changing the engine.
 
 This is aspirational architecture — the current code uses fixed struct fields because there are only three species and the dynamics are hardcoded. The path from here to the registry is incremental: first make the physics modules composable (the gravity/quantum-pressure/hydro factoring above), then generalize the field storage from named members to a registry keyed by species name.
 

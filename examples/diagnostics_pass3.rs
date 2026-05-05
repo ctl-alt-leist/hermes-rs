@@ -19,8 +19,10 @@ use num_complex::Complex64;
 use hermes_rs::core::content::{Content, FieldParams, FieldState};
 use hermes_rs::core::dynamics::Dynamics;
 use hermes_rs::core::schrodinger_dynamics::{SchrodingerPoissonDynamics, kinetic_step};
+use hermes_rs::engine::coupling::poisson::PoissonGravity;
 use hermes_rs::physics::constants::G as GRAV;
 use hermes_rs::physics::cosmology::planck_2018;
+use hermes_rs::physics::grid::Grid as HermesGrid;
 
 fn main() {
     let mut report = String::with_capacity(8192);
@@ -177,7 +179,8 @@ fn main() {
         params,
     };
     let mut content = Content::Fields(field_state);
-    let mut dynamics = SchrodingerPoissonDynamics::new();
+    let hermes_grid = HermesGrid::new(n, box_length);
+    let mut dynamics = SchrodingerPoissonDynamics::new(PoissonGravity::new(hermes_grid));
 
     let growth_init = cosmology.growth_factor(a_init);
 

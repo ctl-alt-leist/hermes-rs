@@ -1,8 +1,9 @@
-//! Fuzzy dark matter scene: even-subalgebra field in a periodic box.
+//! Galaxy group field scene: colliding NFW halos as a Schrodinger-Poisson field.
 //!
-//! A single dark matter field α evolved by the Schrodinger-Poisson
-//! system. The lightest field-theoretic scene — validates the Content::Fields
-//! path through the full pipeline.
+//! The same halo geometry as galaxy-group-pm, but the dark matter is
+//! represented as a wavefunction α in the even subalgebra. The NFW
+//! density profiles and infall velocities are encoded via the inverse
+//! Madelung transform.
 
 pub mod init;
 
@@ -12,6 +13,7 @@ use crate::config::Configuration;
 use crate::core::content::{Content, FieldParams, FieldState};
 use crate::core::dynamics::Dynamics;
 use crate::core::schrodinger_dynamics::SchrodingerPoissonDynamics;
+use crate::engine::coupling::poisson::PoissonGravity;
 use crate::error::HermesError;
 use crate::physics::cosmology::Cosmology;
 use crate::physics::grid::Grid as HermesGrid;
@@ -19,16 +21,25 @@ use crate::scenes::Scene;
 
 const SCENE_DEFAULTS: &str = include_str!("defaults.toml");
 
-/// Fuzzy dark matter: wavefunction + self-gravity.
-pub struct FuzzyDM;
+/// Galaxy group formation via Schrodinger-Poisson field theory.
+pub struct GalaxyGroupField;
 
-impl Scene for FuzzyDM {
+impl Scene for GalaxyGroupField {
     fn name(&self) -> &str {
-        "fuzzy-dm"
+        "galaxy-group-field"
     }
 
     fn default_overrides(&self) -> Option<toml::Value> {
         toml::from_str(SCENE_DEFAULTS).ok()
+    }
+
+    fn validate(&self, config: &Configuration) -> Result<(), HermesError> {
+        if config.simulation.box_length > 10_000.0 {
+            return Err(HermesError::Config(
+                "galaxy-group-field scene expects box_length <= 10 Mpc (10000 kpc)".to_string(),
+            ));
+        }
+        Ok(())
     }
 
     fn initialize(
@@ -50,25 +61,13 @@ impl Scene for FuzzyDM {
             mass_alpha,
         };
 
-        let alpha = match config.initialization.spectrum.as_str() {
-            "power" => init::zeldovich_wavefunction(
-                &hermes_grid,
-                cosmology,
-                &params,
-                config.time.scale_factor_initial(),
-                config.initialization.perturbation_amplitude,
-                seed,
-            )?,
-            _ => init::random_density_field(
-                &hermes_grid,
-                cosmology,
-                &params,
-                config.time.scale_factor_initial(),
-                config.initialization.perturbation_amplitude,
-                config.initialization.band_pass,
-                seed,
-            ),
-        };
+        let alpha = init::colliding_halos_field(
+            &hermes_grid,
+            cosmology,
+            &params,
+            config.time.scale_factor_initial(),
+            seed,
+        );
 
         let field_state = FieldState {
             grid: morphis_grid,
@@ -78,7 +77,8 @@ impl Scene for FuzzyDM {
             params,
         };
 
-        let dynamics = SchrodingerPoissonDynamics::new();
+        let gravity = PoissonGravity::new(hermes_grid);
+        let dynamics = SchrodingerPoissonDynamics::new(gravity);
 
         Ok((Content::Fields(field_state), Box::new(dynamics)))
     }

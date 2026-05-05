@@ -1,6 +1,6 @@
 //! Inspect particle positions and momenta from saved snapshots.
 //!
-//! Usage: cargo run --example inspect_particles --release -- data/cosmic-web
+//! Usage: cargo run --example inspect_particles --release -- data/cosmic-web-pm
 
 use hermes_rs::io::snapshot::{SnapshotContent, load_snapshot};
 use hermes_rs::run::pipeline::find_snapshot_paths;

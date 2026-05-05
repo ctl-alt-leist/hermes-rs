@@ -1,0 +1,59 @@
+# Propagating gravity (aspirational).
+#
+# Dark matter particles with gravity mediated by a dynamical
+# scalar field phi, rather than the instantaneous Poisson solve.
+# The gravitational field propagates at speed c_g and carries
+# its own energy and momentum.
+#
+# When [ontology.fields.phi] is present with free = "wave",
+# the engine evolves phi dynamically. When it is absent,
+# gravity is instantaneous (Poisson). The coupling Lagrangian
+# is the same either way; the difference is whether the
+# mediator has its own dynamics.
+
+# ── Ontology ─────────────────────────────────────────
+
+[ontology.spacetime]
+background     = "flrw"
+hubble         = 67.4    # km/s/Mpc
+omega_m        = 0.315
+omega_v        = 0.685
+omega_b        = 0.0493
+sigma_8        = 0.811
+spectral_index = 0.965
+
+[ontology.particles.dark_matter]
+count = 262144  # 64^3
+mass  = 1e10    # M_sun
+
+[ontology.fields.phi]
+grade = 0        # scalar
+free  = "wave"
+speed = 3e5      # km/s (gravitational signal speed)
+
+[ontology.lagrangian]
+gravity = true
+
+# ── Simulation ───────────────────────────────────────
+
+[simulation.grid]
+n_cells    = 64
+box_length = 100000.0  # kpc (100 Mpc)
+
+[simulation.time]
+scale_factor_range = [0.02, 1.0]  # z ~ 49 to z = 0
+stepping           = "log"
+n_steps            = 300
+
+[simulation.initialization]
+method   = "zeldovich"
+seed     = 42
+spectrum = "eisenstein-hu"
+
+# ── Output ───────────────────────────────────────────
+
+[output.snapshots]
+interval = 1
+
+[output.diagnostics]
+interval = 10

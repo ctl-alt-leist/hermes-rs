@@ -3,7 +3,7 @@
 Hermes is a cosmological simulation engine built on [morphis](https://github.com/ctl-alt-leist/morphis-rs), a geometric algebra library. Named for the messenger god who moves between scales, Hermes implements the dynamical simulation layer of the Hierarchical Closure Dynamics framework -- a multi-scale approach to cosmological structure formation where coarse-grained state spaces are connected bidirectionally to fine-grained patches via restriction and prolongation operators.
 
 <figure style="text-align: center; margin: 2em auto;">
-  <img src="figures/snapshots/fuzzy-dm-density-field.png" alt="Fuzzy dark matter density field" style="display: block; margin: 0 auto; width: 60%; max-width: 60%;">
+  <img src="figures/snapshots/cosmic-web-field-density.png" alt="Dark matter density field" style="display: block; margin: 0 auto; width: 60%; max-width: 60%;">
   <figcaption style="margin: 0.5em auto 0 auto; font-style: italic; text-align: justify; width: 80%; max-width: 80%;">
     Dark matter density field evolved by the Schrodinger-Poisson integrator. The field α lives in the even subalgebra of the geometric algebra and is rendered as volumetric point sprites with additive blending.
   </figcaption>
@@ -26,19 +26,22 @@ Hermes is a cosmological simulation engine built on [morphis](https://github.com
 
 ```bash
 # Run the cosmic web (default scene, 64^3 particles)
-cargo run --release --features vis -- --scene cosmic-web
+cargo run --release --features vis -- --scene cosmic-web-pm
 
-# Run fuzzy dark matter (field theory)
-cargo run --release --features vis -- --scene fuzzy-dm
+# Run cosmic web field theory (Schrodinger-Poisson)
+cargo run --release --features vis -- --scene cosmic-web-field
 
-# Run galaxy group (3 colliding halos)
-cargo run --release --features vis -- --scene galaxy-group
+# Run galaxy group (3 colliding halos, particles)
+cargo run --release --features vis -- --scene galaxy-group-pm
+
+# Run galaxy group (3 colliding halos, field theory)
+cargo run --release --features vis -- --scene galaxy-group-field
 
 # Play back saved snapshots
-cargo run --release --features vis -- --playback data/cosmic-web --fps 30
+cargo run --release --features vis -- --playback data/cosmic-web-pm --fps 30
 
 # Resume a simulation forward in time
-cargo run --release --features vis -- --resume data/cosmic-web --scene cosmic-web configs/resume.local.toml
+cargo run --release --features vis -- --resume data/cosmic-web-pm --scene cosmic-web-pm configs/resume.local.toml
 
 # See all options
 cargo run --release -- --help
@@ -49,7 +52,7 @@ cargo run --release -- --help
 ### Cosmic Web
 
 <figure style="text-align: center; margin: 2em auto;">
-  <img src="figures/snapshots/cosmic-web-late.png" alt="Cosmic web filaments at z=0" style="display: block; margin: 0 auto; width: 60%; max-width: 60%;">
+  <img src="figures/snapshots/cosmic-web-pm-late.png" alt="Cosmic web filaments at z=0" style="display: block; margin: 0 auto; width: 60%; max-width: 60%;">
   <figcaption style="margin: 0.5em auto 0 auto; font-style: italic; text-align: justify; width: 80%; max-width: 80%;">
     Cosmic web at z = 0. Zel'dovich-initialized particles evolved by the particle-mesh method in a 100 Mpc periodic box. Filaments, voids, and nodes emerge from linear perturbations.
   </figcaption>
@@ -58,7 +61,7 @@ cargo run --release -- --help
 ### Galaxy Group
 
 <figure style="text-align: center; margin: 2em auto;">
-  <img src="figures/snapshots/galaxy-group-merged.png" alt="Galaxy group after halo merger" style="display: block; margin: 0 auto; width: 60%; max-width: 60%;">
+  <img src="figures/snapshots/galaxy-group-pm-merged.png" alt="Galaxy group after halo merger" style="display: block; margin: 0 auto; width: 60%; max-width: 60%;">
   <figcaption style="margin: 0.5em auto 0 auto; font-style: italic; text-align: justify; width: 80%; max-width: 80%;">
     Three NFW dark matter halos after gravitational merger in an 8 Mpc box. The halos were initialized with infall velocities toward their common center of mass.
   </figcaption>
@@ -73,7 +76,7 @@ Arguments:
   [CONFIG_FILE]        TOML config file (overrides defaults)
 
 Options:
-  --scene <NAME>       Simulation scene [default: cosmic-web]
+  --scene <NAME>       Simulation scene [default: cosmic-web-pm]
   --live               Open live 3D viewer (requires --features vis)
   --save [DIR]         Save snapshots (default: data/<scene>/)
   --no-save            Don't save snapshots

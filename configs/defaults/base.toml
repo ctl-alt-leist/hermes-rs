@@ -1,0 +1,157 @@
+# Hermes base configuration.
+#
+# Every configurable value and its default. Scene configs and user
+# overrides are deep-merged on top of this file. If a key is not
+# set anywhere else, the value here is what the engine uses.
+#
+# The top-level structure:
+#
+#   [ontology]     what exists and what governs it
+#   [simulation]   how we compute it
+#   [output]       what we record, report, and display
+
+
+# ═════════════════════════════════════════════════════
+#  Ontology
+# ═════════════════════════════════════════════════════
+#
+# The ontology defines the physical content of the simulation:
+# the background spacetime, the species in the box (particles
+# and fields), and the Lagrangian terms that govern their
+# dynamics and interactions.
+
+# ── Spacetime ────────────────────────────────────────
+#
+# The background geometry. "flrw" gives an expanding universe
+# with the parameters below. "static" gives a fixed box with
+# no expansion (a = 1 always, H = 0).
+
+[ontology.spacetime]
+background     = "flrw"
+hubble         = 67.4      # km/s/Mpc (H0)
+omega_m        = 0.315     # total matter density parameter
+omega_v        = 0.685     # vacuum energy density parameter
+omega_b        = 0.0493    # baryon density parameter
+omega_r        = 9.15e-5   # radiation density parameter
+omega_k        = 0.0       # curvature density parameter
+sigma_8        = 0.811     # amplitude of matter fluctuations
+spectral_index = 0.965     # primordial power spectrum tilt
+
+# ── Particles ────────────────────────────────────────
+#
+# Each [ontology.particles.<name>] entry declares a particle
+# species. Omit entirely if the simulation has no particles.
+#
+# No particle species are defined in the base defaults.
+# Scene configs add them as needed, e.g.:
+#
+#   [ontology.particles.dark_matter]
+#   count = 262144   # total particle count
+#   mass  = 1e10     # M_sun per particle
+
+# ── Fields ───────────────────────────────────────────
+#
+# Each [ontology.fields.<name>] entry declares a field species.
+# Omit entirely if the simulation has no fields.
+#
+# No field species are defined in the base defaults.
+# Scene configs add them as needed, e.g.:
+#
+#   [ontology.fields.alpha]
+#   grade        = [0, 3]         # even subalgebra
+#   mass         = 1e10           # M_sun
+#   length_scale = 2000.0         # l/m: diffusivity (kpc^2 / Gyr)
+#   free         = "schrodinger"
+
+# ── Lagrangian ───────────────────────────────────────
+#
+# Coupling terms between species. Free terms live on each
+# species entry (the "free" key); cross-species interactions
+# live here.
+#
+# No couplings are defined in the base defaults.
+# Scene configs add them as needed, e.g.:
+#
+#   [ontology.lagrangian]
+#   gravity         = true                  # universal
+#   electromagnetic = ["beta", "gamma"]     # selective
+
+
+# ═════════════════════════════════════════════════════
+#  Simulation
+# ═════════════════════════════════════════════════════
+#
+# Numerical parameters: spatial resolution, time stepping,
+# and initial conditions. These control how the physics is
+# computed, not what the physics is.
+
+# ── Grid ─────────────────────────────────────────────
+
+[simulation.grid]
+n_cells    = 32          # cells per side (N^3 total)
+box_length = 100000.0    # comoving box side in kpc (100 Mpc)
+
+# ── Time ─────────────────────────────────────────────
+#
+# For FLRW spacetimes, use scale_factor_range (dimensionless).
+# For static spacetimes, use time_range (in simulation time units).
+# Only one should be set; the engine infers which from the spacetime.
+
+[simulation.time]
+scale_factor_range = [0.02, 1.0]    # z ~ 49 to z = 0
+stepping           = "log"          # "log" or "linear"
+n_steps            = 300
+
+# ── Initialization ───────────────────────────────────
+#
+# How to build the initial state. Scene configs override
+# this to select a method and its parameters.
+
+[simulation.initialization]
+method                 = "zeldovich"
+seed                   = 42
+spectrum               = "power"       # "power" (CDM P(k)) or "random" (synthetic)
+perturbation_amplitude = 0.1           # RMS density perturbation
+band_pass              = [1.5, 0.5]    # [k_min / k_fundamental, k_max / k_nyquist]
+
+
+# ═════════════════════════════════════════════════════
+#  Output
+# ═════════════════════════════════════════════════════
+#
+# What we write to disk, print to the terminal, and render
+# on screen.
+
+# ── Snapshots ────────────────────────────────────────
+
+[output.snapshots]
+interval  = 1    # save a snapshot every N steps
+directory = ""   # empty: default to data/<scene>/
+
+# ── Diagnostics ──────────────────────────────────────
+
+[output.diagnostics]
+interval = 10    # compute conservation audits every N steps
+
+# ── Logging ──────────────────────────────────────────
+
+[output.logging]
+level    = "info"    # "error", "warn", "info", "debug", "trace"
+progress = true      # print step progress to terminal
+
+# ── Display ──────────────────────────────────────────
+#
+# Visualization settings. Only used when --live or --playback
+# is active (requires the "vis" feature).
+
+[output.display]
+point_size      = 5.0                    # screen-space point size (particles)
+blob_size       = 18.0                   # screen-space blob size (volumetric fields)
+blob_alpha      = 0.12                   # per-blob opacity for additive blending
+blob_falloff    = 10.0                   # Gaussian falloff rate for volumetric blobs
+camera_distance = 1.9                    # distance from origin (box is [-0.5, 0.5])
+camera_angle    = [0.56, 0.42, 0.69]    # direction unit vector (normalized * distance)
+colormap_range  = [0.3, 3.0]            # [floor, ceiling] as density / rho_mean
+jitter          = 0.3                    # grid-point jitter as fraction of cell size
+gif_resolution  = 512                    # pixel size for GIF recording
+gif_point_radius = 1                     # point radius in GIF frames

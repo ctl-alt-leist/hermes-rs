@@ -1,0 +1,15 @@
+# Galaxy group (field): 3 colliding NFW halos as a Schrodinger-Poisson field.
+
+[simulation]
+n_grid       = 64
+n_particles  = 1
+box_length   = 8000.0     # 8 Mpc in kpc
+
+[time]
+scale_factor_range    = [1.0, 2.5]
+scale_factor_stepping = "linear"
+n_steps               = 600
+
+[field]
+length_scale = 4000.0     # l/m: diffusivity (kpc^2 / Gyr)
+mass         = 1e10

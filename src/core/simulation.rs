@@ -73,11 +73,11 @@ impl Simulation {
         })
     }
 
-    /// Construct from config using the default cosmic-web scene.
+    /// Construct from config using the default cosmic-web-pm scene.
     ///
     /// Convenience method for tests and backward compatibility.
     pub fn from_config(config: Configuration, seed: u64) -> Result<Self, HermesError> {
-        let scene = crate::scenes::cosmic_web::CosmicWeb;
+        let scene = crate::scenes::cosmic_web_pm::CosmicWebPM;
 
         Self::from_scene(&scene, config, seed)
     }

@@ -23,11 +23,11 @@ For resumed simulations, the step numbering continues from the last snapshot's s
 
 | Mode | Sim | Router | Disk | Precompute | Main |
 |------|-----|--------|------|------------|------|
-| `hermes --save` | spawned | spawned | spawned | -- | blocks on join |
-| `hermes --live` | spawned | spawned | optional | spawned | viewer loop |
-| `hermes --playback` | -- | -- | -- | loader | viewer loop |
-| `hermes --record` | -- | -- | -- | -- | sequential encode |
-| `hermes --resume` | spawned | spawned | spawned | -- | blocks on join |
+| `cargo run -- --save` | spawned | spawned | spawned | -- | blocks on join |
+| `cargo run -- --live` | spawned | spawned | optional | spawned | viewer loop |
+| `cargo run -- --playback` | -- | -- | -- | loader | viewer loop |
+| `cargo run -- --record` | -- | -- | -- | -- | sequential encode |
+| `cargo run -- --resume` | spawned | spawned | spawned | -- | blocks on join |
 
 The simulation always runs on a spawned thread. The main thread always owns the event loop (macOS requires the window event loop on the main thread). In headless and resume modes, the main thread blocks on `sim_handle.join()`.
 

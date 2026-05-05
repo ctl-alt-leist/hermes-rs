@@ -1,3 +1,6 @@
+
+CLAUDE: This is actually what we did last. It' good to have an understanding that we worked on this (and we probably learned and made changes to the plan as we went). So, we'll get rid of these notes soon (c field theory planning up), but it's worth having on our mind as we work in case anything comes up related.
+
 # Firming Up the Field Theory
 
 The field-theoretic engine in Hermes works. The dynamics evolves, the visuals look broadly sensible, and the pipeline produces snapshots end-to-end. What it does not yet have is the kind of foundation under which one can stop tweaking dials and start trusting results. Past instabilities — the field failing to concentrate at the right rate, phases looking pathological on the lattice, the slow drift away from the Zel'dovich initialization that worked cleanly in the particle-mesh code — are symptoms of a small set of structural questions that have not yet been answered with full clarity.
@@ -126,7 +129,7 @@ $$
 
 which equals $m_α \, \mathbf{v}$ only when the second term vanishes — that is, only when $\mathbf{v}$ is constant. The "local plane wave" approximation pretends each point sees a uniform velocity equal to its local $\mathbf{v}$, but the resulting phase field has a global structure inconsistent with the velocity field it was supposed to encode. When the field is then evolved, the Madelung extraction $\mathbf{v}_α = ∇ \arg(α) \, / \, m_α$ produces a velocity that does not match the velocity that went in.
 
-This is the bug currently sitting in `src/scenes/fuzzy_dm/init.rs:161-162` — the Zel'dovich wavefunction initialization uses precisely this $\mathbf{v}(\mathbf{x}) \cdot \mathbf{x}$ form. The random-density initialization in the same file uses the velocity-potential form correctly at line 321, and the surrounding comment is unusually direct about why: "the kinetic step immediately disperses" the $\mathbf{v} \cdot \mathbf{x}$ phase. The Zel'dovich path needs the same $φ_v$ treatment.
+This is the bug currently sitting in `src/scenes/cosmic_web_field/init.rs:161-162` — the Zel'dovich wavefunction initialization uses precisely this $\mathbf{v}(\mathbf{x}) \cdot \mathbf{x}$ form. The random-density initialization in the same file uses the velocity-potential form correctly at line 321, and the surrounding comment is unusually direct about why: "the kinetic step immediately disperses" the $\mathbf{v} \cdot \mathbf{x}$ phase. The Zel'dovich path needs the same $φ_v$ treatment.
 
 The correct procedure goes through the velocity *potential*. Because Zel'dovich displacement is curl-free (it is the gradient of a scalar), the velocity field is also curl-free, and there exists a scalar $φ_v$ with $\mathbf{v} = ∇ φ_v$. In Fourier space this is
 
@@ -152,7 +155,7 @@ $$
 σ^2(\mathbf{k}) \;=\; P(k) \cdot V_{\text{box}}
 $$
 
-in matched units. The current Zel'dovich initialization in `src/scenes/fuzzy_dm/init.rs:68-69` has the inverse, $σ^2 = P(k) \, / \, V_{\text{box}}$, which gives the wrong relative weighting across $k$-modes by a factor of $V_{\text{box}}^2$. The cosmic-web particle-mesh initialization in `src/scenes/cosmic_web/init.rs:167-168` has the correct form. The fix is one character.
+in matched units. The current Zel'dovich initialization in `src/scenes/cosmic_web_field/init.rs:68-69` has the inverse, $σ^2 = P(k) \, / \, V_{\text{box}}$, which gives the wrong relative weighting across $k$-modes by a factor of $V_{\text{box}}^2$. The cosmic-web particle-mesh initialization in `src/scenes/cosmic_web_pm/init.rs:167-168` has the correct form. The fix is one character.
 
 ### A note on the initialization redshift
 
@@ -198,7 +201,7 @@ One subtlety specific to R2C transforms (which Hermes uses for field initializat
 
 ## 5 · Collapsing the unit system
 
-The Hermes code currently carries $ℓ$ and $m_α$ as separate parameters, but the dynamics depends only on the combination $ν \equiv ℓ \, / \, m_α$. This is the single physical scale of the dark-matter sector — a phase-space volume per time, with dimensions of $\mathrm{Mpc}^2 \, / \, \mathrm{Gyr}$ in our chosen units, equivalently a kinematic quantum diffusivity. Setting $m_α = 1$ in code units (which is just the choice of mass scale) and substituting, the evolution equation reduces to
+The Hermes code currently carries $ℓ$ and $m_α$ as separate parameters, but the dynamics depends only on the combination $ν \equiv ℓ \, / \, m_α$. This is the single physical scale of the dark-matter sector — a phase-space volume per time, with dimensions of $\mathrm{Mpc}^2 \, / \, \mathrm{Gyr}$ in our chosen units, equivalently a kinematic diffusivity. Setting $m_α = 1$ in code units (which is just the choice of mass scale) and substituting, the evolution equation reduces to
 
 $$
 \mathbb{1} \, ∂_t α \;=\; -\frac{ν}{2 \, a^2} \, ∇^2 α \;+\; \frac{Φ}{ν} \, α
@@ -239,7 +242,7 @@ The code-review pass surfaced a concrete set of methods that Hermes currently ha
 - `EvenField::integrate` returns $\int dV \, |α|^2$ and $\int dV \, m_α \, |α|^2$ for the norm and mass diagnostics that every conservation test needs.
 - `EvenField::kinetic_energy(ν)` returns $(ν \, / \, 2) \, \int dV \, |∇α|^2$, the kinetic-energy functional in the simplified-units form.
 
-Inside Hermes itself, the FFT helper functions `fft_3d` and `ifft_3d` are currently duplicated between `src/dynamics/schrodinger_dynamics.rs` and `src/scenes/fuzzy_dm/init.rs`. They should live in a shared module — `physics::spectral` is the natural home — with no behavioral change. The duplication is the kind of small inconsistency that compounds: the two copies will drift, and when they do the bug will live wherever the next person did not look.
+Inside Hermes itself, the FFT helper functions `fft_3d` and `ifft_3d` are currently duplicated between `src/dynamics/schrodinger_dynamics.rs` and `src/scenes/cosmic_web_field/init.rs`. They should live in a shared module — `physics::spectral` is the natural home — with no behavioral change. The duplication is the kind of small inconsistency that compounds: the two copies will drift, and when they do the bug will live wherever the next person did not look.
 
 ## 7 · Tests that should exist before the run is trusted
 
@@ -273,9 +276,9 @@ The existing test suite has 166 tests, comprehensive for the particle-mesh path,
 
 The summary below pulls together what the code-review pass through Hermes and Morphis verified, what it caught, and what was already in better shape than expected. The findings are not new conclusions; they are concrete grounding for the analysis in the preceding sections.
 
-What is verified correct: the signs and factors in the split-step integrator match the cosmological Schrödinger-Poisson equation. Kinetic phase $-ℓ \, k^2 \, Δt \, / \, (2 \, m_α \, a^2)$, potential phase $-m_α \, Φ \, Δt \, / \, ℓ$, Poisson source $4 π G \, \bar{ρ} \, a^2 \, δ$ with the inverse Laplacian dividing by $-k^2$ and the zero mode projected out, and right-multiplication by $\cos θ + \mathbb{1} \, \sin θ$ for even-subalgebra phase rotation are all correct. The configuration-to-runtime mapping $ℓ = (ℓ \, / \, m) \cdot m$ at `src/scenes/fuzzy_dm/mod.rs:49` is correct. FFT conventions are internally consistent across both repos: Hermes uses R2C with no normalization on forward and $1 \, / \, N^D$ on inverse; Morphis uses C2C with the same normalization split. The discrete sin² Green's function in the particle-mesh Poisson solver and the continuous $-k^2$ kernel in the spectral solver are the right division of responsibilities — the particle-mesh chain matches its CIC deposition, the spectral chain is exact.
+What is verified correct: the signs and factors in the split-step integrator match the cosmological Schrödinger-Poisson equation. Kinetic phase $-ℓ \, k^2 \, Δt \, / \, (2 \, m_α \, a^2)$, potential phase $-m_α \, Φ \, Δt \, / \, ℓ$, Poisson source $4 π G \, \bar{ρ} \, a^2 \, δ$ with the inverse Laplacian dividing by $-k^2$ and the zero mode projected out, and right-multiplication by $\cos θ + \mathbb{1} \, \sin θ$ for even-subalgebra phase rotation are all correct. The configuration-to-runtime mapping $ℓ = (ℓ \, / \, m) \cdot m$ at `src/scenes/cosmic_web_field/mod.rs:49` is correct. FFT conventions are internally consistent across both repos: Hermes uses R2C with no normalization on forward and $1 \, / \, N^D$ on inverse; Morphis uses C2C with the same normalization split. The discrete sin² Green's function in the particle-mesh Poisson solver and the continuous $-k^2$ kernel in the spectral solver are the right division of responsibilities — the particle-mesh chain matches its CIC deposition, the spectral chain is exact.
 
-What needs surgical fixes: two bugs in `src/scenes/fuzzy_dm/init.rs`. The Zel'dovich wavefunction phase at lines 161–162 uses $\mathbf{v}(\mathbf{x}) \cdot \mathbf{x}$ where it should use the velocity potential $φ_v(\mathbf{x})$ — the failure mode predicted in section 3, and one the code's own sibling routine warns against in a comment. The per-mode amplitude at lines 68–69 has $σ = \sqrt{P \, / \, V_{\text{box}}}$ where it should be $σ = \sqrt{P \cdot V_{\text{box}}}$ — the cosmic-web particle-mesh init at `src/scenes/cosmic_web/init.rs:167-168` has the right form. Both are local, surgical, and testable.
+What needs surgical fixes: two bugs in `src/scenes/cosmic_web_field/init.rs`. The Zel'dovich wavefunction phase at lines 161–162 uses $\mathbf{v}(\mathbf{x}) \cdot \mathbf{x}$ where it should use the velocity potential $φ_v(\mathbf{x})$ — the failure mode predicted in section 3, and one the code's own sibling routine warns against in a comment. The per-mode amplitude at lines 68–69 has $σ = \sqrt{P \, / \, V_{\text{box}}}$ where it should be $σ = \sqrt{P \cdot V_{\text{box}}}$ — the cosmic-web particle-mesh init at `src/scenes/cosmic_web_pm/init.rs:167-168` has the right form. Both are local, surgical, and testable.
 
 What is structurally tight at current parameters: the de Broglie wavelength at typical flow speeds is below the lattice Nyquist scale, as worked out in section 2. Either $ν$ goes up, the grid refines, or the box shrinks — but the current configuration cannot resolve the wave content the formulation is built around, and this is the most likely diagnosis behind the field developing grid-scale noise.
 
@@ -289,7 +292,7 @@ What is the largest gap: the test suite has 166 tests for the particle-mesh path
 
 The point of having tests at every level is that the work can be sequenced so each layer is verified before the next is built on top. The sequence I would follow, in order:
 
-Zeroth, before anything structural, fix the two surgical bugs in `src/scenes/fuzzy_dm/init.rs` — the velocity-potential phase form and the inverted per-mode amplitude. These are local, the corrected forms are already documented in sections 3 and 4 of this note, and the corresponding tests in section 7 (Madelung round-trip and Zel'dovich consistency) will exercise the fix. This unblocks the rest of the work by making the existing field-theory path produce sensible initial states again.
+Zeroth, before anything structural, fix the two surgical bugs in `src/scenes/cosmic_web_field/init.rs` — the velocity-potential phase form and the inverted per-mode amplitude. These are local, the corrected forms are already documented in sections 3 and 4 of this note, and the corresponding tests in section 7 (Madelung round-trip and Zel'dovich consistency) will exercise the fix. This unblocks the rest of the work by making the existing field-theory path produce sensible initial states again.
 
 First, get the spectral kit in Morphis to floating-point precision on the cheap tests in section 7 — derivative correctness, Laplacian self-adjointness, Poisson round-trip. Do not touch dynamics until these pass.
 
