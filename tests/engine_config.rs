@@ -7,7 +7,7 @@ use std::path::Path;
 
 #[test]
 fn cosmic_web_pm_parses() {
-    let config = load_scene_config(Path::new("configs/defaults/cosmic-web-pm.toml")).unwrap();
+    let config = load_scene_config(Path::new("scenes/cosmic-web-pm.toml")).unwrap();
 
     assert_eq!(
         config.ontology.spacetime.background,
@@ -29,7 +29,7 @@ fn cosmic_web_pm_parses() {
 
 #[test]
 fn cosmic_web_field_parses() {
-    let config = load_scene_config(Path::new("configs/defaults/cosmic-web-field.toml")).unwrap();
+    let config = load_scene_config(Path::new("scenes/cosmic-web-ft.toml")).unwrap();
 
     assert_eq!(
         config.ontology.spacetime.background,
@@ -50,7 +50,7 @@ fn cosmic_web_field_parses() {
 
 #[test]
 fn galaxy_group_pm_parses() {
-    let config = load_scene_config(Path::new("configs/defaults/galaxy-group-pm.toml")).unwrap();
+    let config = load_scene_config(Path::new("scenes/galaxy-group-pm.toml")).unwrap();
 
     let dm = &config.ontology.particles["dark_matter"];
     assert_eq!(dm.count, 32768);
@@ -60,7 +60,7 @@ fn galaxy_group_pm_parses() {
 
 #[test]
 fn static_wave_packet_parses() {
-    let config = load_scene_config(Path::new("configs/defaults/static-wave-packet.toml")).unwrap();
+    let config = load_scene_config(Path::new("scenes/static-wave-packet.toml")).unwrap();
 
     assert_eq!(
         config.ontology.spacetime.background,
@@ -78,7 +78,7 @@ fn static_wave_packet_parses() {
 
 #[test]
 fn multi_species_parses() {
-    let config = load_scene_config(Path::new("configs/defaults/multi-species.toml")).unwrap();
+    let config = load_scene_config(Path::new("scenes/multi-species.toml")).unwrap();
 
     assert!(config.ontology.has_particles());
     assert!(config.ontology.has_fields());
@@ -96,7 +96,7 @@ fn multi_species_parses() {
 
 #[test]
 fn propagating_gravity_parses() {
-    let config = load_scene_config(Path::new("configs/defaults/propagating-gravity.toml")).unwrap();
+    let config = load_scene_config(Path::new("scenes/propagating-gravity.toml")).unwrap();
 
     assert!(config.ontology.fields.contains_key("phi"));
     let phi = &config.ontology.fields["phi"];
@@ -213,7 +213,7 @@ fn empty_ontology_fails_validation() {
 
 #[test]
 fn scene_overrides_base_defaults() {
-    let config = load_scene_config(Path::new("configs/defaults/cosmic-web-pm.toml")).unwrap();
+    let config = load_scene_config(Path::new("scenes/cosmic-web-pm.toml")).unwrap();
 
     // Scene overrides base n_cells (32 → 64)
     assert_eq!(config.simulation.grid.n_cells, 64);
@@ -224,7 +224,7 @@ fn scene_overrides_base_defaults() {
 
 #[test]
 fn output_display_defaults_populated() {
-    let config = load_scene_config(Path::new("configs/defaults/cosmic-web-pm.toml")).unwrap();
+    let config = load_scene_config(Path::new("scenes/cosmic-web-pm.toml")).unwrap();
 
     // Display defaults from base.toml should be present
     assert_eq!(config.output.display.point_size, 5.0);

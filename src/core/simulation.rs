@@ -73,6 +73,48 @@ impl Simulation {
         })
     }
 
+    /// Construct a simulation from an EngineConfig.
+    ///
+    /// Loads cosmology, dispatches initialization by config, and builds
+    /// the legacy Configuration for the simulation driver internals.
+    pub fn from_engine_config(
+        engine_config: &crate::config::EngineConfig,
+    ) -> Result<Self, HermesError> {
+        engine_config.validate()?;
+
+        let cosmology = crate::physics::cosmology::Cosmology::from_engine_config(engine_config)?;
+        cosmology.validate()?;
+
+        let config = Configuration::from_engine_config(engine_config, &cosmology);
+        let scale_factor = config.time.scale_factor_initial();
+
+        let (content, dynamics) =
+            crate::physics::initial::initialize_from_config(engine_config, &cosmology)?;
+
+        let diagnostics_history = if let Some(particles) = content.particles() {
+            let grid = crate::physics::grid::Grid::new(
+                config.simulation.n_cells(),
+                config.simulation.box_length,
+            );
+            let mut solver = crate::physics::poisson::PoissonSolver::new(&grid);
+            let diag =
+                Diagnostics::compute(particles, &grid, &cosmology, &mut solver, scale_factor);
+            vec![diag]
+        } else {
+            Vec::new()
+        };
+
+        Ok(Self {
+            config,
+            cosmology,
+            content,
+            dynamics,
+            diagnostics_history,
+            step: 0,
+            scale_factor,
+        })
+    }
+
     /// Construct from config using the default cosmic-web-pm scene.
     ///
     /// Convenience method for tests and backward compatibility.

@@ -1,15 +1,8 @@
-# Propagating gravity (aspirational).
+# Cosmic web (particle-mesh).
 #
-# Dark matter particles with gravity mediated by a dynamical
-# scalar field phi, rather than the instantaneous Poisson solve.
-# The gravitational field propagates at speed c_g and carries
-# its own energy and momentum.
-#
-# When [ontology.fields.phi] is present with free = "wave",
-# the engine evolves phi dynamically. When it is absent,
-# gravity is instantaneous (Poisson). The coupling Lagrangian
-# is the same either way; the difference is whether the
-# mediator has its own dynamics.
+# 64^3 dark matter particles in a 100 Mpc periodic box,
+# Zel'dovich-initialized from the CDM power spectrum at z ~ 49,
+# evolved to z = 0 under Poisson gravity.
 
 # ── Ontology ─────────────────────────────────────────
 
@@ -17,7 +10,7 @@
 background     = "flrw"
 hubble         = 67.4    # km/s/Mpc
 omega_m        = 0.315
-omega_v        = 0.685
+omega_v        = 0.6849085
 omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
@@ -25,11 +18,6 @@ spectral_index = 0.965
 [ontology.particles.dark_matter]
 count = 262144  # 64^3
 mass  = 1e10    # M_sun
-
-[ontology.fields.phi]
-grade = 0        # scalar
-free  = "wave"
-speed = 3e5      # km/s (gravitational signal speed)
 
 [ontology.lagrangian]
 gravity = true

@@ -1,8 +1,8 @@
-# Cosmic web (particle-mesh).
+# Galaxy group (particle-mesh).
 #
-# 64^3 dark matter particles in a 100 Mpc periodic box,
-# Zel'dovich-initialized from the CDM power spectrum at z ~ 49,
-# evolved to z = 0 under Poisson gravity.
+# Three colliding NFW dark matter halos in an 8 Mpc box.
+# Initialized at z = 0 and evolved forward ~15 Gyr to watch
+# the merger unfold under Poisson gravity.
 
 # ── Ontology ─────────────────────────────────────────
 
@@ -10,14 +10,14 @@
 background     = "flrw"
 hubble         = 67.4    # km/s/Mpc
 omega_m        = 0.315
-omega_v        = 0.685
+omega_v        = 0.6849085
 omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
 
 [ontology.particles.dark_matter]
-count = 262144  # 64^3
-mass  = 1e10    # M_sun
+count = 32768  # 32^3
+mass  = 1e10   # M_sun
 
 [ontology.lagrangian]
 gravity = true
@@ -25,18 +25,29 @@ gravity = true
 # ── Simulation ───────────────────────────────────────
 
 [simulation.grid]
-n_cells    = 64
-box_length = 100000.0  # kpc (100 Mpc)
+n_cells    = 32
+box_length = 8000.0  # kpc (8 Mpc)
 
 [simulation.time]
-scale_factor_range = [0.02, 1.0]  # z ~ 49 to z = 0
-stepping           = "log"
-n_steps            = 300
+scale_factor_range = [1.0, 2.5]  # z = 0 forward
+stepping           = "linear"
+n_steps            = 600
 
 [simulation.initialization]
-method   = "zeldovich"
-seed     = 42
-spectrum = "eisenstein-hu"
+method = "nfw-group"
+seed   = 42
+
+[[simulation.initialization.halos]]
+mass_fraction = 0.5263   # 1.0 / 1.9
+concentration = 8.0
+
+[[simulation.initialization.halos]]
+mass_fraction = 0.3158   # 0.6 / 1.9
+concentration = 10.0
+
+[[simulation.initialization.halos]]
+mass_fraction = 0.1579   # 0.3 / 1.9
+concentration = 14.0
 
 # ── Output ───────────────────────────────────────────
 

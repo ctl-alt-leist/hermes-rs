@@ -1,9 +1,15 @@
-# Multi-species cosmological simulation (aspirational).
+# Propagating gravity (aspirational).
 #
-# Dark matter particles, a dark matter wavefunction alpha,
-# a baryon field beta, and an electromagnetic bivector field gamma.
-# Gravity couples everything massive; electromagnetism couples
-# the baryons to the EM field.
+# Dark matter particles with gravity mediated by a dynamical
+# scalar field phi, rather than the instantaneous Poisson solve.
+# The gravitational field propagates at speed c_g and carries
+# its own energy and momentum.
+#
+# When [ontology.fields.phi] is present with free = "wave",
+# the engine evolves phi dynamically. When it is absent,
+# gravity is instantaneous (Poisson). The coupling Lagrangian
+# is the same either way; the difference is whether the
+# mediator has its own dynamics.
 
 # ── Ontology ─────────────────────────────────────────
 
@@ -11,7 +17,7 @@
 background     = "flrw"
 hubble         = 67.4    # km/s/Mpc
 omega_m        = 0.315
-omega_v        = 0.685
+omega_v        = 0.6849085
 omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
@@ -20,36 +26,24 @@ spectral_index = 0.965
 count = 262144  # 64^3
 mass  = 1e10    # M_sun
 
-[ontology.fields.alpha]
-grade        = [0, 3]    # even subalgebra
-mass         = 1e10      # M_sun
-length_scale = 2000.0    # kpc^2 / Gyr
-free         = "schrodinger"
-
-[ontology.fields.beta]
-grade        = [0, 3]    # even subalgebra (baryon fluid)
-mass         = 1e6       # M_sun
-length_scale = 500.0     # kpc^2 / Gyr
-free         = "euler"
-
-[ontology.fields.gamma]
-grade = 2  # bivector
-free  = "maxwell"
+[ontology.fields.phi]
+grade = 0        # scalar
+free  = "wave"
+speed = 3e5      # km/s (gravitational signal speed)
 
 [ontology.lagrangian]
-gravity         = true                 # universal: all massive species
-electromagnetic = ["beta", "gamma"]    # selective: charged species only
+gravity = true
 
 # ── Simulation ───────────────────────────────────────
 
 [simulation.grid]
-n_cells    = 128
+n_cells    = 64
 box_length = 100000.0  # kpc (100 Mpc)
 
 [simulation.time]
 scale_factor_range = [0.02, 1.0]  # z ~ 49 to z = 0
 stepping           = "log"
-n_steps            = 500
+n_steps            = 300
 
 [simulation.initialization]
 method   = "zeldovich"

@@ -154,6 +154,84 @@ impl Default for VisualizationConfig {
 }
 
 // ============================================================================
+// Conversion from EngineConfig
+// ============================================================================
+
+impl Configuration {
+    /// Build a legacy Configuration from an EngineConfig.
+    ///
+    /// This bridges the new config format to the existing simulation
+    /// driver, which still reads from the legacy fields.
+    pub fn from_engine_config(
+        engine: &super::EngineConfig,
+        cosmology: &crate::physics::cosmology::Cosmology,
+    ) -> Self {
+        let grid = &engine.simulation.grid;
+        let time = &engine.simulation.time;
+        let init = &engine.simulation.initialization;
+
+        // Determine n_particles from the particle species, if any.
+        let n_particles = engine
+            .ontology
+            .particles
+            .values()
+            .next()
+            .map(|p| (p.count as f64).cbrt().round() as usize)
+            .unwrap_or(1);
+
+        // Determine field params from the first field species, if any.
+        let field_config = engine
+            .ontology
+            .fields
+            .values()
+            .next()
+            .map(|f| FieldConfig {
+                length_scale: f.length_scale.unwrap_or(2000.0),
+                mass: f.mass.unwrap_or(1e10),
+            })
+            .unwrap_or_default();
+
+        let scale_factor_range = time.scale_factor_range.unwrap_or([0.02, 1.0]);
+
+        Self {
+            cosmology: cosmology.clone(),
+            simulation: SimulationConfig {
+                n_grid: grid.n_cells,
+                n_particles,
+                box_length: grid.box_length,
+            },
+            time: TimeConfig {
+                scale_factor_range,
+                n_steps: time.n_steps,
+                scale_factor_stepping: time.stepping.clone(),
+            },
+            output: OutputConfig {
+                write_interval: engine.output.snapshots.interval,
+                diagnostic_interval: engine.output.diagnostics.interval,
+            },
+            initialization: InitializationConfig {
+                spectrum: init.spectrum.clone(),
+                perturbation_amplitude: init.perturbation_amplitude,
+                band_pass: init.band_pass,
+            },
+            field: field_config,
+            visualization: VisualizationConfig {
+                point_size: engine.output.display.point_size,
+                blob_size: engine.output.display.blob_size,
+                blob_alpha: engine.output.display.blob_alpha,
+                blob_falloff: engine.output.display.blob_falloff,
+                camera_distance: engine.output.display.camera_distance,
+                camera_angle: engine.output.display.camera_angle,
+                colormap_range: engine.output.display.colormap_range,
+                jitter: engine.output.display.jitter,
+                gif_resolution: engine.output.display.gif_resolution,
+                gif_point_radius: engine.output.display.gif_point_radius,
+            },
+        }
+    }
+}
+
+// ============================================================================
 // Convenience accessors
 // ============================================================================
 
@@ -180,7 +258,7 @@ impl VisualizationConfig {
 // Embedded defaults
 // ============================================================================
 
-const DEFAULTS_TOML: &str = include_str!("../../configs/defaults.toml");
+const DEFAULTS_TOML: &str = include_str!("defaults.toml");
 
 // ============================================================================
 // Loading

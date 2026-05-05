@@ -83,6 +83,18 @@ pub struct InitializationConfig {
     /// Band-pass filter as [k_min / k_fundamental, k_max / k_nyquist].
     #[serde(default = "default_band_pass")]
     pub band_pass: [f64; 2],
+    /// NFW halo specifications for the nfw-group method.
+    #[serde(default)]
+    pub halos: Vec<HaloSpec>,
+}
+
+/// NFW halo specification for the nfw-group initialization method.
+#[derive(Debug, Clone, Deserialize)]
+pub struct HaloSpec {
+    /// Fraction of total box mass in this halo.
+    pub mass_fraction: f64,
+    /// NFW concentration parameter.
+    pub concentration: f64,
 }
 
 fn default_method() -> String {
@@ -109,6 +121,7 @@ impl Default for InitializationConfig {
             spectrum: default_spectrum(),
             perturbation_amplitude: default_perturbation_amplitude(),
             band_pass: default_band_pass(),
+            halos: Vec::new(),
         }
     }
 }

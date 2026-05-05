@@ -1,8 +1,9 @@
-# Galaxy group (particle-mesh).
+# Galaxy group (field theory).
 #
 # Three colliding NFW dark matter halos in an 8 Mpc box.
-# Initialized at z = 0 and evolved forward ~15 Gyr to watch
-# the merger unfold under Poisson gravity.
+# The dark matter is represented as a wavefunction alpha in the
+# even subalgebra. Density and infall velocities encoded via the
+# inverse Madelung transform with per-halo plane-wave phases.
 
 # ── Ontology ─────────────────────────────────────────
 
@@ -10,14 +11,16 @@
 background     = "flrw"
 hubble         = 67.4    # km/s/Mpc
 omega_m        = 0.315
-omega_v        = 0.685
+omega_v        = 0.6849085
 omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
 
-[ontology.particles.dark_matter]
-count = 32768  # 32^3
-mass  = 1e10   # M_sun
+[ontology.fields.alpha]
+grade        = [0, 3]    # even subalgebra
+mass         = 1e10      # M_sun
+length_scale = 4000.0    # l/m: diffusivity (kpc^2 / Gyr)
+free         = "schrodinger"
 
 [ontology.lagrangian]
 gravity = true
@@ -25,7 +28,7 @@ gravity = true
 # ── Simulation ───────────────────────────────────────
 
 [simulation.grid]
-n_cells    = 32
+n_cells    = 64
 box_length = 8000.0  # kpc (8 Mpc)
 
 [simulation.time]
@@ -36,6 +39,18 @@ n_steps            = 600
 [simulation.initialization]
 method = "nfw-group"
 seed   = 42
+
+[[simulation.initialization.halos]]
+mass_fraction = 0.5263   # 1.0 / 1.9
+concentration = 8.0
+
+[[simulation.initialization.halos]]
+mass_fraction = 0.3158   # 0.6 / 1.9
+concentration = 10.0
+
+[[simulation.initialization.halos]]
+mass_fraction = 0.1579   # 0.3 / 1.9
+concentration = 14.0
 
 # ── Output ───────────────────────────────────────────
 

@@ -30,7 +30,7 @@
 background     = "flrw"
 hubble         = 67.4      # km/s/Mpc (H0)
 omega_m        = 0.315     # total matter density parameter
-omega_v        = 0.685     # vacuum energy density parameter
+omega_v        = 0.6849085    # vacuum energy density parameter
 omega_b        = 0.0493    # baryon density parameter
 omega_r        = 9.15e-5   # radiation density parameter
 omega_k        = 0.0       # curvature density parameter

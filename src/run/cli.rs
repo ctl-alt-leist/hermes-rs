@@ -2,38 +2,35 @@
 
 use clap::Parser;
 
-/// Hermes — Cosmological particle-mesh simulation.
+/// Hermes — Hierarchical Closure Dynamics simulator.
 #[derive(Parser, Debug)]
-#[command(name = "hermes", about = "Hierarchical Closure Dynamics simulator")]
+#[command(name = "hermes")]
 pub struct Cli {
-    /// TOML config file (overrides defaults).
-    pub config_file: Option<String>,
-
-    /// Simulation scene.
-    #[arg(long, default_value = "cosmic-web-pm")]
+    /// Scene config: path to a .toml file (with or without extension).
+    #[arg(long, default_value = "scenes/cosmic-web-pm")]
     pub scene: String,
+
+    /// Base config file merged under the scene config (optional overrides).
+    #[arg(long)]
+    pub config: Option<String>,
+
+    /// Save snapshots (default dir: next to scene TOML; or specify a path).
+    #[arg(long)]
+    pub save: Option<Option<String>>,
 
     /// Open live 3D viewer during simulation (requires --features vis).
     #[arg(long)]
     pub live: bool,
 
-    /// Save snapshots to directory (default: data/<timestamp>/).
-    #[arg(long)]
-    pub save: Option<Option<String>>,
-
-    /// Don't save snapshots.
-    #[arg(long, conflicts_with = "save")]
-    pub no_save: bool,
-
-    /// Play back saved snapshots from directory (no simulation).
+    /// Play back saved snapshots from directory (requires --features vis).
     #[arg(long)]
     pub playback: Option<String>,
 
-    /// Save playback as GIF (e.g. --record output.gif). Use with --playback.
+    /// Save playback as GIF (use with --playback).
     #[arg(long)]
     pub record: Option<String>,
 
-    /// Playback framerate in fps.
+    /// Playback/recording framerate.
     #[arg(long, default_value = "30")]
     pub fps: u64,
 
@@ -45,11 +42,11 @@ pub struct Cli {
     #[arg(long)]
     pub steps: Option<usize>,
 
-    /// Override particles per side (N_p).
+    /// Override particles per side.
     #[arg(long)]
     pub particles: Option<usize>,
 
-    /// Override grid cells per side (N_g).
+    /// Override grid cells per side.
     #[arg(long)]
     pub grid: Option<usize>,
 
@@ -63,20 +60,19 @@ pub struct Cli {
 }
 
 impl Cli {
-    /// Resolve the save directory.
+    /// Resolve the save directory. None if --save was not passed.
     ///
     /// - `--save dir` → use that dir
-    /// - `--save` (no arg) → `data/<scene>/`
-    /// - no flag and no `--no-save` → `data/<scene>/` (save by default)
-    /// - `--no-save` → None
+    /// - `--save` (no arg) → directory next to the scene TOML (strip .toml)
+    /// - no --save flag → None (don't save)
     pub fn save_directory(&self) -> Option<String> {
-        if self.no_save {
-            return None;
-        }
-
         match &self.save {
             Some(Some(dir)) => Some(dir.clone()),
-            Some(None) | None => Some(format!("data/{}", self.scene)),
+            Some(None) => {
+                let base = self.scene.strip_suffix(".toml").unwrap_or(&self.scene);
+                Some(base.to_string())
+            }
+            None => None,
         }
     }
 }
