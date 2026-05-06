@@ -170,9 +170,9 @@ impl VectorField {
 
     /// Write a morphis grade-1 vector into a cell.
     pub fn set_vector_at(&mut self, m0: usize, m1: usize, m2: usize, v: &Vector<3>) {
-        self.data[0][[m0, m1, m2]] = v.component(&[0]);
-        self.data[1][[m0, m1, m2]] = v.component(&[1]);
-        self.data[2][[m0, m1, m2]] = v.component(&[2]);
+        self.data[0][[m0, m1, m2]] = v.component(&[1]);
+        self.data[1][[m0, m1, m2]] = v.component(&[2]);
+        self.data[2][[m0, m1, m2]] = v.component(&[3]);
     }
 
     /// Dot product of two vector fields at a cell, via the geometric product.

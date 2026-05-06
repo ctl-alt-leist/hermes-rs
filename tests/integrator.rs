@@ -28,9 +28,9 @@ fn kick_adds_force_times_factor() {
     kick(&mut particles, &forces, kick_factor);
 
     let momentum = particles.momentum_of(0);
-    assert!((momentum.component(&[0]) - 1.0).abs() < 1e-12);
-    assert!((momentum.component(&[1]) - 5.0).abs() < 1e-12);
-    assert!((momentum.component(&[2]) - 0.0).abs() < 1e-12);
+    assert!((momentum.component(&[1]) - 1.0).abs() < 1e-12);
+    assert!((momentum.component(&[2]) - 5.0).abs() < 1e-12);
+    assert!((momentum.component(&[3]) - 0.0).abs() < 1e-12);
 }
 
 #[test]
@@ -79,9 +79,9 @@ fn drift_moves_particles_by_momentum() {
     // x_new = x + (p / m) * drift_factor = (10, 20, 30) + (4, 6, 8) / 2 * 0.5
     //       = (10 + 1, 20 + 1.5, 30 + 2) = (11, 21.5, 32)
     let pos = particles.position_of(0);
-    assert!((pos.component(&[0]) - 11.0).abs() < 1e-12);
-    assert!((pos.component(&[1]) - 21.5).abs() < 1e-12);
-    assert!((pos.component(&[2]) - 32.0).abs() < 1e-12);
+    assert!((pos.component(&[1]) - 11.0).abs() < 1e-12);
+    assert!((pos.component(&[2]) - 21.5).abs() < 1e-12);
+    assert!((pos.component(&[3]) - 32.0).abs() < 1e-12);
 }
 
 #[test]
@@ -97,9 +97,9 @@ fn drift_wraps_periodic() {
     // 99 + 5 = 104, wraps to 4.
     let pos = particles.position_of(0);
     assert!(
-        (pos.component(&[0]) - 4.0).abs() < 1e-10,
+        (pos.component(&[1]) - 4.0).abs() < 1e-10,
         "x should wrap: got {}",
-        pos.component(&[0])
+        pos.component(&[1])
     );
 }
 

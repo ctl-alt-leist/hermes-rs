@@ -172,9 +172,9 @@ fn vector_field_vector_at() {
     let v = field.vector_at(1, 2, 3);
 
     assert_eq!(v.grade(), 1);
-    assert!((v.component(&[0]) - 7.0).abs() < 1e-15);
-    assert!((v.component(&[1]) - 8.0).abs() < 1e-15);
-    assert!((v.component(&[2]) - 9.0).abs() < 1e-15);
+    assert!((v.component(&[1]) - 7.0).abs() < 1e-15);
+    assert!((v.component(&[2]) - 8.0).abs() < 1e-15);
+    assert!((v.component(&[3]) - 9.0).abs() < 1e-15);
 }
 
 #[test]
@@ -186,9 +186,9 @@ fn vector_field_set_vector_at() {
     field.set_vector_at(1, 1, 1, &v);
 
     let got = field.vector_at(1, 1, 1);
-    assert!((got.component(&[0]) - 1.0).abs() < 1e-15);
-    assert!((got.component(&[1]) - 2.0).abs() < 1e-15);
-    assert!((got.component(&[2]) - 3.0).abs() < 1e-15);
+    assert!((got.component(&[1]) - 1.0).abs() < 1e-15);
+    assert!((got.component(&[2]) - 2.0).abs() < 1e-15);
+    assert!((got.component(&[3]) - 3.0).abs() < 1e-15);
 }
 
 #[test]

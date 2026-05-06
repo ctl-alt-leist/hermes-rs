@@ -106,9 +106,9 @@ fn set_and_get_position_morphis() {
     let got = particles.position_of(5);
 
     assert_eq!(got.grade(), 1);
-    assert!((got.component(&[0]) - 1.0).abs() < 1e-15);
-    assert!((got.component(&[1]) - 2.0).abs() < 1e-15);
-    assert!((got.component(&[2]) - 3.0).abs() < 1e-15);
+    assert!((got.component(&[1]) - 1.0).abs() < 1e-15);
+    assert!((got.component(&[2]) - 2.0).abs() < 1e-15);
+    assert!((got.component(&[3]) - 3.0).abs() < 1e-15);
 }
 
 #[test]
@@ -120,9 +120,9 @@ fn set_and_get_momentum_morphis() {
     let got = particles.momentum_of(3);
 
     assert_eq!(got.grade(), 1);
-    assert!((got.component(&[0]) - 4.0).abs() < 1e-15);
-    assert!((got.component(&[1]) - 5.0).abs() < 1e-15);
-    assert!((got.component(&[2]) - 6.0).abs() < 1e-15);
+    assert!((got.component(&[1]) - 4.0).abs() < 1e-15);
+    assert!((got.component(&[2]) - 5.0).abs() < 1e-15);
+    assert!((got.component(&[3]) - 6.0).abs() < 1e-15);
 }
 
 #[test]
@@ -160,9 +160,9 @@ fn total_momentum_sums_correctly() {
     particles.set_momentum(1, &vector_from_components(0.0, 2.0, 3.0));
 
     let total = particles.total_momentum();
-    assert!((total.component(&[0]) - 1.0).abs() < 1e-12);
-    assert!((total.component(&[1]) - 2.0).abs() < 1e-12);
-    assert!((total.component(&[2]) - 3.0).abs() < 1e-12);
+    assert!((total.component(&[1]) - 1.0).abs() < 1e-12);
+    assert!((total.component(&[2]) - 2.0).abs() < 1e-12);
+    assert!((total.component(&[3]) - 3.0).abs() < 1e-12);
 }
 
 #[test]
@@ -175,7 +175,7 @@ fn angular_momentum_is_bivector() {
 
     // x ∧ p for x along e0, p along e1 → bivector in the e0∧e1 plane.
     assert_eq!(angular_momentum.grade(), 2);
-    assert!((angular_momentum.component(&[0, 1]) - 1.0).abs() < 1e-12);
+    assert!((angular_momentum.component(&[1, 2]) - 1.0).abs() < 1e-12);
 }
 
 #[test]

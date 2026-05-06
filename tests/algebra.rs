@@ -35,9 +35,9 @@ fn vector_from_array_roundtrip() {
     let v = vector_from_array([4.0, 5.0, 6.0]);
 
     assert_eq!(v.grade(), 1);
-    assert!((v.component(&[0]) - 4.0).abs() < 1e-15);
-    assert!((v.component(&[1]) - 5.0).abs() < 1e-15);
-    assert!((v.component(&[2]) - 6.0).abs() < 1e-15);
+    assert!((v.component(&[1]) - 4.0).abs() < 1e-15);
+    assert!((v.component(&[2]) - 5.0).abs() < 1e-15);
+    assert!((v.component(&[3]) - 6.0).abs() < 1e-15);
 }
 
 #[test]
@@ -72,9 +72,9 @@ fn vector_addition() {
     let v = vector_from_components(0.0, 2.0, 3.0);
     let w = &u + &v;
 
-    assert!((w.component(&[0]) - 1.0).abs() < 1e-15);
-    assert!((w.component(&[1]) - 2.0).abs() < 1e-15);
-    assert!((w.component(&[2]) - 3.0).abs() < 1e-15);
+    assert!((w.component(&[1]) - 1.0).abs() < 1e-15);
+    assert!((w.component(&[2]) - 2.0).abs() < 1e-15);
+    assert!((w.component(&[3]) - 3.0).abs() < 1e-15);
 }
 
 #[test]
@@ -82,9 +82,9 @@ fn vector_scalar_multiplication() {
     let v = vector_from_components(1.0, 2.0, 3.0);
     let scaled = &v * 2.0;
 
-    assert!((scaled.component(&[0]) - 2.0).abs() < 1e-15);
-    assert!((scaled.component(&[1]) - 4.0).abs() < 1e-15);
-    assert!((scaled.component(&[2]) - 6.0).abs() < 1e-15);
+    assert!((scaled.component(&[1]) - 2.0).abs() < 1e-15);
+    assert!((scaled.component(&[2]) - 4.0).abs() < 1e-15);
+    assert!((scaled.component(&[3]) - 6.0).abs() < 1e-15);
 }
 
 #[test]
@@ -107,11 +107,11 @@ fn dot_product_via_geometric() {
 #[test]
 fn wedge_product_produces_bivector() {
     let e = basis(euclidean_3());
-    let bivector = wedge(&e[0], &e[1]);
+    let bivector = wedge(&e[1], &e[2]);
 
     assert_eq!(bivector.grade(), 2);
-    assert!((bivector.component(&[0, 1]) - 1.0).abs() < 1e-15);
-    assert!((bivector.component(&[1, 0]) + 1.0).abs() < 1e-15);
+    assert!((bivector.component(&[1, 2]) - 1.0).abs() < 1e-15);
+    assert!((bivector.component(&[2, 1]) + 1.0).abs() < 1e-15);
 }
 
 #[test]
@@ -130,11 +130,11 @@ fn wedge_product_antisymmetric() {
 #[test]
 fn interior_product_contracts_grade() {
     let e = basis(euclidean_3());
-    let bivector = wedge(&e[0], &e[1]); // grade 2
+    let bivector = wedge(&e[1], &e[2]); // grade 2
 
-    // e0 ⌋ (e0 ∧ e1) should give e1 (grade 1)
-    let result = interior_left(&e[0], &bivector);
+    // e1 ⌋ (e1 ∧ e2) should give e2 (grade 1)
+    let result = interior_left(&e[1], &bivector);
 
     assert_eq!(result.grade(), 1);
-    assert!((result.component(&[1]) - 1.0).abs() < 1e-12);
+    assert!((result.component(&[2]) - 1.0).abs() < 1e-12);
 }

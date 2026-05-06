@@ -255,9 +255,9 @@ fn madelung_inverse_then_velocity_recovers_grad_phi() {
         let x = m as f64 * grid.cell_length;
         let expected_vx = -0.5 * k * (k * x).sin();
         let actual = velocity.at(&[m, 0, 0]);
-        approx_eq(actual.component(&[0]), expected_vx, 1e-8);
-        approx_eq(actual.component(&[1]), 0.0, 1e-8);
+        approx_eq(actual.component(&[1]), expected_vx, 1e-8);
         approx_eq(actual.component(&[2]), 0.0, 1e-8);
+        approx_eq(actual.component(&[3]), 0.0, 1e-8);
     }
 }
 
@@ -543,7 +543,7 @@ fn overdensity_develops_inward_velocity() {
 
     // Extract velocity and check direction at x = L/4.
     let velocity = alpha.madelung_velocity(nu);
-    let vx_at_quarter = velocity.at(&[n / 4, 0, 0]).component(&[0]);
+    let vx_at_quarter = velocity.at(&[n / 4, 0, 0]).component(&[1]);
 
     // At x = L/4, the overdensity peak is to the left (x = 0).
     // Gravity should pull matter leftward: v_x < 0.
@@ -555,7 +555,7 @@ fn overdensity_develops_inward_velocity() {
 
     // At x = 3L/4, the overdensity peak is to the right (x = L, wrapping to 0).
     // Gravity should pull matter rightward: v_x > 0.
-    let vx_at_three_quarter = velocity.at(&[3 * n / 4, 0, 0]).component(&[0]);
+    let vx_at_three_quarter = velocity.at(&[3 * n / 4, 0, 0]).component(&[1]);
     assert!(
         vx_at_three_quarter > 0.0,
         "expected inward flow at x = 3L/4: v_x = {} (should be positive)",

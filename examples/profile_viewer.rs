@@ -56,9 +56,9 @@ fn main() {
         let mut bin_counts = vec![0_usize; n_bins * n_bins * n_bins];
 
         for pos in snapshot.positions.iter() {
-            let x = (pos.component(&[0]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
-            let y = (pos.component(&[1]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
-            let z = (pos.component(&[2]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
+            let x = (pos.component(&[1]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
+            let y = (pos.component(&[2]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
+            let z = (pos.component(&[3]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
             let bx = (x / bin_size) as usize;
             let by = (y / bin_size) as usize;
             let bz = (z / bin_size) as usize;
@@ -68,9 +68,9 @@ fn main() {
         let mean_count = n as f64 / (n_bins * n_bins * n_bins) as f64;
 
         for (p, pos) in snapshot.positions.iter().enumerate() {
-            let x = (pos.component(&[0]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
-            let y = (pos.component(&[1]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
-            let z = (pos.component(&[2]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
+            let x = (pos.component(&[1]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
+            let y = (pos.component(&[2]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
+            let z = (pos.component(&[3]) * scale as f64 + 0.5).clamp(0.0, 0.9999);
             let bx = (x / bin_size) as usize;
             let by = (y / bin_size) as usize;
             let bz = (z / bin_size) as usize;
@@ -91,9 +91,9 @@ fn main() {
         let mut positions = vec![[0.0_f32; 3]; n];
         for (p, pos) in snapshot.positions.iter().enumerate() {
             positions[p] = [
-                pos.component(&[0]) as f32,
                 pos.component(&[1]) as f32,
                 pos.component(&[2]) as f32,
+                pos.component(&[3]) as f32,
             ];
         }
         std::hint::black_box(&positions);

@@ -80,7 +80,7 @@ fn snapshot_roundtrip_via_disk() {
         let restored = &loaded.positions().unwrap()[n];
 
         assert_eq!(restored.grade(), 1);
-        for d in 0..3 {
+        for d in 1..=3 {
             assert!(
                 (original.component(&[d]) - restored.component(&[d])).abs() < 1e-12,
                 "position mismatch at particle {n}, component {d}"
