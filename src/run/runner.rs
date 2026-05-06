@@ -588,7 +588,9 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
         .positions()
         .unwrap_or(&[])
         .iter()
-        .flat_map(|pos: &morphis::vector::Vector<3>| (0..3).map(move |d| pos.component(&[d]).abs()))
+        .flat_map(|pos: &morphis::vector::Vector<3>| {
+            (1..=3).map(move |d| pos.component(&[d]).abs())
+        })
         .fold(0.0_f64, f64::max)
         * 1.1;
     let scale = 1.0 / box_length;
@@ -638,8 +640,8 @@ fn record_to_gif(dir: &str, output_path: &str, cli: &Cli) -> Result<(), HermesEr
         }
 
         for (pos, &speed) in snapshot.positions().unwrap().iter().zip(speeds.iter()) {
-            let x_norm = pos.component(&[0]) * scale;
-            let y_norm = pos.component(&[1]) * scale;
+            let x_norm = pos.component(&[1]) * scale;
+            let y_norm = pos.component(&[2]) * scale;
 
             let pixel_x = (x_norm * width as f64) as i32;
             let pixel_y = (y_norm * height as f64) as i32;

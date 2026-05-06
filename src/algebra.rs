@@ -36,7 +36,7 @@ pub fn vector_from_array(components: [f64; 3]) -> Vector<3> {
 
 /// Extract Cartesian components from a grade-1 `Vector<3>`.
 pub fn components_from_vector(v: &Vector<3>) -> [f64; 3] {
-    [v.component(&[0]), v.component(&[1]), v.component(&[2])]
+    [v.component(&[1]), v.component(&[2]), v.component(&[3])]
 }
 
 /// Build a grade-0 scalar `Vector<3>` from an `f64`.

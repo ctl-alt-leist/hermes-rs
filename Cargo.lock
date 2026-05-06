@@ -1762,7 +1762,7 @@ dependencies = [
 [[package]]
 name = "morphis"
 version = "0.1.0"
-source = "git+https://github.com/ctl-alt-leist/morphis-rs.git#36e6e0ec38ff367dbd7d8663f43f0841f22face7"
+source = "git+https://github.com/ctl-alt-leist/morphis-rs.git#00813217542546ff1378aaa02e4e019159226af8"
 dependencies = [
  "ndarray",
  "ndrustfft",

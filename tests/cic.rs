@@ -198,21 +198,21 @@ fn uniform_force_returns_same_for_all_particles() {
     for p in 0..particles.count() {
         let force_p = forces.force_on(p);
         assert!(
-            (force_p.component(&[0]) - 1.0 * mass_particle).abs() / mass_particle < 1e-12,
+            (force_p.component(&[1]) - 1.0 * mass_particle).abs() / mass_particle < 1e-12,
             "particle {p}: Fx = {}, expected {}",
-            force_p.component(&[0]),
+            force_p.component(&[1]),
             1.0 * mass_particle
         );
         assert!(
-            (force_p.component(&[1]) - 2.0 * mass_particle).abs() / mass_particle < 1e-12,
+            (force_p.component(&[2]) - 2.0 * mass_particle).abs() / mass_particle < 1e-12,
             "particle {p}: Fy = {}, expected {}",
-            force_p.component(&[1]),
+            force_p.component(&[2]),
             2.0 * mass_particle
         );
         assert!(
-            (force_p.component(&[2]) - 3.0 * mass_particle).abs() / mass_particle < 1e-12,
+            (force_p.component(&[3]) - 3.0 * mass_particle).abs() / mass_particle < 1e-12,
             "particle {p}: Fz = {}, expected {}",
-            force_p.component(&[2]),
+            force_p.component(&[3]),
             3.0 * mass_particle
         );
     }
@@ -235,22 +235,22 @@ fn interpolation_at_cell_center_reads_cell_value() {
     let mass_particle = particles.mass_particle;
 
     assert!(
-        (force_0.component(&[0]) - 7.0 * mass_particle).abs() < 1e-2,
+        (force_0.component(&[1]) - 7.0 * mass_particle).abs() < 1e-2,
         "Fx at cell center: expected {}, got {}",
         7.0 * mass_particle,
-        force_0.component(&[0])
-    );
-    assert!(
-        (force_0.component(&[1]) - 8.0 * mass_particle).abs() < 1e-2,
-        "Fy at cell center: expected {}, got {}",
-        8.0 * mass_particle,
         force_0.component(&[1])
     );
     assert!(
-        (force_0.component(&[2]) - 9.0 * mass_particle).abs() < 1e-2,
+        (force_0.component(&[2]) - 8.0 * mass_particle).abs() < 1e-2,
+        "Fy at cell center: expected {}, got {}",
+        8.0 * mass_particle,
+        force_0.component(&[2])
+    );
+    assert!(
+        (force_0.component(&[3]) - 9.0 * mass_particle).abs() < 1e-2,
         "Fz at cell center: expected {}, got {}",
         9.0 * mass_particle,
-        force_0.component(&[2])
+        force_0.component(&[3])
     );
 }
 

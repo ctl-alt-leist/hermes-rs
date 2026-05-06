@@ -156,7 +156,7 @@ pub fn extract_velocity(
     let n = alpha.grid.n_cells;
 
     std::array::from_fn(|d| {
-        let component = v_field.component_field(&[d]);
+        let component = v_field.component_field(&[d + 1]);
         let mut out = ndarray::ArrayD::zeros(ndarray::IxDyn(&[n, n, n]));
         out.assign(&component.data);
         out

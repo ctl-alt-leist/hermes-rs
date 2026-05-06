@@ -48,9 +48,9 @@ fn main() {
                     let d = d.abs();
                     if d > l / 2.0 { l - d } else { d }
                 };
-                let dx = wrap(pos.component(&[0]) - x0, 100000.0);
-                let dy = wrap(pos.component(&[1]) - y0, 100000.0);
-                let dz = wrap(pos.component(&[2]) - z0, 100000.0);
+                let dx = wrap(pos.component(&[1]) - x0, 100000.0);
+                let dy = wrap(pos.component(&[2]) - y0, 100000.0);
+                let dz = wrap(pos.component(&[3]) - z0, 100000.0);
                 let disp = (dx * dx + dy * dy + dz * dz).sqrt();
                 if disp > max_disp {
                     max_disp = disp;

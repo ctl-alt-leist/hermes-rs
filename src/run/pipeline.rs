@@ -263,9 +263,9 @@ pub fn precompute_frame_rayon(
 
             for (pos, &speed) in positions.iter().zip(speeds.iter()) {
                 out_positions.push([
-                    pos.component(&[0]) as f32 * scale - 0.5,
                     pos.component(&[1]) as f32 * scale - 0.5,
                     pos.component(&[2]) as f32 * scale - 0.5,
+                    pos.component(&[3]) as f32 * scale - 0.5,
                 ]);
                 let normalized = ((speed - speed_min) / speed_range).clamp(0.0, 1.0);
                 out_colors.push(colormap_hot(normalized));
@@ -747,7 +747,7 @@ fn estimate_box_length(snapshot: &crate::io::snapshot::Snapshot) -> f64 {
             positions
                 .iter()
                 .flat_map(|pos: &morphis::vector::Vector<3>| {
-                    (0..3).map(move |d| pos.component(&[d]).abs())
+                    (1..=3).map(move |d| pos.component(&[d]).abs())
                 })
                 .fold(0.0_f64, f64::max)
                 * 1.1
