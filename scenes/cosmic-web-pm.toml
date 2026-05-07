@@ -31,7 +31,7 @@ box_length = 100000.0  # kpc (100 Mpc)
 [simulation.time]
 scale_factor_range = [0.02, 1.0]  # z ~ 49 to z = 0
 stepping           = "log"
-n_steps            = 300
+n_steps            = 600
 
 [simulation.initialization]
 method   = "zeldovich"
@@ -41,7 +41,7 @@ spectrum = "eisenstein-hu"
 # ── Output ───────────────────────────────────────────
 
 [output.snapshots]
-interval = 1
+interval = 5
 
 [output.diagnostics]
 interval = 10
