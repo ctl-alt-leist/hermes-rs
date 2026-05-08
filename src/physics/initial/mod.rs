@@ -143,6 +143,7 @@ pub fn initialize_from_config(
                 scale_factor_initial,
                 seed,
                 &halos,
+                1.0,
             )?;
             let dynamics = ParticleMeshDynamics::new(grid);
 
@@ -167,6 +168,7 @@ pub fn initialize_from_config(
                 scale_factor_initial,
                 seed,
                 &halos,
+                1.0,
             );
 
             let field_state = FieldState {
@@ -181,6 +183,66 @@ pub fn initialize_from_config(
             let dynamics = SchrodingerPoissonDynamics::new(gravity);
 
             Ok((Content::Fields(field_state), Box::new(dynamics)))
+        }
+
+        ("nfw-group", true, true) => {
+            // Mixed: particles and fields each carry half the cosmological density.
+            let n_per_side = config
+                .ontology
+                .particles
+                .values()
+                .next()
+                .map(|p| p.n)
+                .unwrap_or(32);
+
+            let (ell, mass) = field_params_from_config(config)?;
+            let morphis_grid = morphis::grid::Grid::<3>::new(n_cells, box_length);
+
+            let params = FieldParams {
+                smoothing_length: ell,
+                mass_alpha: mass,
+            };
+
+            let halos = halo_configs_from_config(config);
+
+            let particles = nfw::colliding_halos_init(
+                n_per_side,
+                &grid,
+                cosmology,
+                scale_factor_initial,
+                seed,
+                &halos,
+                0.5,
+            )?;
+
+            let alpha = nfw_field::colliding_halos_field(
+                &grid,
+                cosmology,
+                &params,
+                scale_factor_initial,
+                seed,
+                &halos,
+                0.5,
+            );
+
+            let field_state = FieldState {
+                grid: morphis_grid,
+                alpha: Some(alpha),
+                beta: None,
+                gamma: None,
+                params,
+            };
+
+            let gravity = PoissonGravity::new(grid);
+            let dynamics = SchrodingerPoissonDynamics::new(gravity);
+
+            Ok((
+                Content::Mixed {
+                    particles,
+                    fields: field_state,
+                },
+                Box::new(dynamics),
+            ))
         }
 
         _ => Err(HermesError::Config(format!(
