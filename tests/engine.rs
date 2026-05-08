@@ -468,3 +468,136 @@ fn field_norm_raw(field: &EvenField<3>) -> f64 {
         .map(|(a, b)| a * a + b * b)
         .sum()
 }
+
+// ============================================================================
+// Snapshot capture tests
+// ============================================================================
+
+#[test]
+fn snapshot_captures_all_field_species() {
+    let n = 8;
+    let box_length = 1.0;
+    let grid = Grid::new(n, box_length);
+    let morphis_grid = MorphisGrid::<3>::new(n, box_length);
+    let g = euclidean::<3>();
+
+    let alpha = EvenField::from_fn(&morphis_grid, g, |_| (1.0, 0.0));
+    let beta = EvenField::from_fn(&morphis_grid, g, |_| (0.5, 0.0));
+
+    let mut fields = BTreeMap::new();
+    fields.insert(
+        "alpha".to_string(),
+        FieldEntry {
+            data: alpha,
+            smoothing_length: 1.0,
+            mass: 1.0,
+            self_interaction: None,
+        },
+    );
+    fields.insert(
+        "beta".to_string(),
+        FieldEntry {
+            data: beta,
+            smoothing_length: 1.0,
+            mass: 1.0,
+            self_interaction: Some(1.0),
+        },
+    );
+
+    let state = SimulationState {
+        particles: BTreeMap::new(),
+        fields,
+        grid,
+        morphis_grid,
+        time: 0.0,
+        step: 5,
+    };
+
+    let snapshot = hermes_rs::io::snapshot::Snapshot::capture_from_state(&state, 5, 1.0);
+
+    assert_eq!(snapshot.fields.len(), 2);
+    assert!(snapshot.fields.iter().any(|f| f.name == "alpha"));
+    assert!(snapshot.fields.iter().any(|f| f.name == "beta"));
+    assert!(snapshot.particles.is_empty());
+    assert_eq!(snapshot.n_cells, n);
+}
+
+#[test]
+fn snapshot_captures_all_particle_species() {
+    use hermes_rs::physics::particles::Particles;
+
+    let n = 8;
+    let box_length = 100.0;
+    let grid = Grid::new(n, box_length);
+    let morphis_grid = MorphisGrid::<3>::new(n, box_length);
+
+    let dm = Particles::zeros(10, 1e10);
+    let stars = Particles::zeros(5, 1e8);
+
+    let mut particles = BTreeMap::new();
+    particles.insert("dark_matter".to_string(), dm);
+    particles.insert("stars".to_string(), stars);
+
+    let state = SimulationState {
+        particles,
+        fields: BTreeMap::new(),
+        grid,
+        morphis_grid,
+        time: 0.0,
+        step: 3,
+    };
+
+    let snapshot = hermes_rs::io::snapshot::Snapshot::capture_from_state(&state, 3, 0.5);
+
+    assert_eq!(snapshot.particles.len(), 2);
+    assert!(snapshot.particles.iter().any(|p| p.name == "dark_matter"));
+    assert!(snapshot.particles.iter().any(|p| p.name == "stars"));
+    assert_eq!(snapshot.particle_count(), 15);
+    assert!(snapshot.fields.is_empty());
+}
+
+#[test]
+fn snapshot_captures_mixed_content() {
+    use hermes_rs::physics::particles::Particles;
+
+    let n = 8;
+    let box_length = 100.0;
+    let grid = Grid::new(n, box_length);
+    let morphis_grid = MorphisGrid::<3>::new(n, box_length);
+    let g = euclidean::<3>();
+
+    let alpha = EvenField::from_fn(&morphis_grid, g, |_| (1.0, 0.0));
+    let dm = Particles::zeros(10, 1e10);
+
+    let mut fields = BTreeMap::new();
+    fields.insert(
+        "alpha".to_string(),
+        FieldEntry {
+            data: alpha,
+            smoothing_length: 1.0,
+            mass: 1.0,
+            self_interaction: None,
+        },
+    );
+
+    let mut particles = BTreeMap::new();
+    particles.insert("dark_matter".to_string(), dm);
+
+    let state = SimulationState {
+        particles,
+        fields,
+        grid,
+        morphis_grid,
+        time: 0.0,
+        step: 0,
+    };
+
+    let snapshot = hermes_rs::io::snapshot::Snapshot::capture_from_state(&state, 0, 1.0);
+
+    assert!(snapshot.has_particles());
+    assert!(snapshot.has_fields());
+    assert_eq!(snapshot.particles.len(), 1);
+    assert_eq!(snapshot.fields.len(), 1);
+    assert_eq!(snapshot.particle_count(), 10);
+    assert_eq!(snapshot.n_cells, n);
+}

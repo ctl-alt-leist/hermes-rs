@@ -2,7 +2,7 @@
 //!
 //! Usage: cargo run --example inspect_particles --release -- data/cosmic-web-pm
 
-use hermes_rs::io::snapshot::{SnapshotContent, load_snapshot};
+use hermes_rs::io::snapshot::load_snapshot;
 use hermes_rs::run::pipeline::find_snapshot_paths;
 
 fn main() {
@@ -25,12 +25,9 @@ fn main() {
         }
 
         let snap = load_snapshot(path).unwrap();
-        if let SnapshotContent::Particles {
-            ref positions,
-            ref momenta,
-            ..
-        } = snap.content
-        {
+        if let Some(species) = snap.particles.first() {
+            let positions = &species.positions;
+            let momenta = &species.momenta;
             let n_p = (positions.len() as f64).cbrt().round() as usize;
             let spacing = 100000.0 / n_p as f64; // assumes 100 Mpc box
 
