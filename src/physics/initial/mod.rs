@@ -21,6 +21,7 @@ pub use zeldovich::{power_spectrum, transfer_function, zeldovich_init};
 use crate::config::EngineConfig;
 use crate::core::content::{Content, FieldParams, FieldState};
 use crate::core::dynamics::Dynamics;
+use crate::core::mixed_dynamics::MixedDynamics;
 use crate::core::pm_dynamics::ParticleMeshDynamics;
 use crate::core::schrodinger_dynamics::SchrodingerPoissonDynamics;
 use crate::engine::coupling::poisson::PoissonGravity;
@@ -234,7 +235,7 @@ pub fn initialize_from_config(
             };
 
             let gravity = PoissonGravity::new(grid);
-            let dynamics = SchrodingerPoissonDynamics::new(gravity);
+            let dynamics = MixedDynamics::new(gravity);
 
             Ok((
                 Content::Mixed {

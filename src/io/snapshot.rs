@@ -163,8 +163,47 @@ impl Snapshot {
                     diagnostics: DiagnosticsSummary::zero(scale_factor),
                 }
             }
-            Content::Mixed { particles, .. } => {
-                Self::capture_particles("dark_matter", particles, step, scale_factor)
+            Content::Mixed { particles, fields } => {
+                let positions = (0..particles.count())
+                    .map(|p| particles.position_of(p))
+                    .collect();
+                let momenta = (0..particles.count())
+                    .map(|p| particles.momentum_of(p))
+                    .collect();
+
+                let particle_snapshots = vec![ParticleSpeciesSnapshot {
+                    name: "dark matter particles".to_string(),
+                    positions,
+                    momenta,
+                    mass_particle: particles.mass_particle,
+                }];
+
+                let n = fields.grid.n_cells;
+                let mut field_snapshots = Vec::new();
+                if let Some(ref alpha) = fields.alpha {
+                    let density_field = alpha.density(fields.params.mass_alpha);
+                    let density: Vec<f64> = density_field.data.iter().copied().collect();
+                    field_snapshots.push(FieldSpeciesSnapshot {
+                        name: "dark matter field".to_string(),
+                        density,
+                    });
+                }
+
+                Self {
+                    step,
+                    scale_factor,
+                    particles: particle_snapshots,
+                    fields: field_snapshots,
+                    n_cells: n,
+                    diagnostics: DiagnosticsSummary {
+                        scale_factor,
+                        mass_total: particles.total_mass(),
+                        momentum_magnitude: particles.total_momentum().norm(),
+                        energy_kinetic: particles.kinetic_energy(scale_factor),
+                        energy_potential: 0.0,
+                        angular_momentum_magnitude: 0.0,
+                    },
+                }
             }
         }
     }
