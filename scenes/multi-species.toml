@@ -63,3 +63,12 @@ interval = 1
 
 [output.diagnostics]
 interval = 10
+
+[output.display.species.alpha]
+colormap = "cool"  # blue/purple for dark matter
+
+[output.display.species.beta]
+colormap = "ember"  # red/orange/gold for baryons
+
+[output.display.species.gamma]
+colormap = "verdant"  # green for magnetic field

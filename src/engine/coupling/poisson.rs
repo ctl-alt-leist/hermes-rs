@@ -159,7 +159,7 @@ impl PoissonGravity {
         })?;
 
         let alpha = fields.alpha.as_mut().ok_or_else(|| {
-            HermesError::Config("gravity potential step requires alpha field".to_string())
+            HermesError::Config("gravity potential step requires α field".to_string())
         })?;
 
         let ell = fields.params.smoothing_length;

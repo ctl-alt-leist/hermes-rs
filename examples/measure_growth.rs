@@ -39,7 +39,11 @@ fn main() {
             }
         };
 
-        if let SnapshotContent::Fields { ref density, .. } = snapshot.content {
+        if let SnapshotContent::Fields { ref species, .. } = snapshot.content {
+            let density = &species
+                .first()
+                .expect("no field species in snapshot")
+                .density;
             let rho_mean = density.iter().sum::<f64>() / density.len() as f64;
 
             let deltas: Vec<f64> = density.iter().map(|&rho| rho / rho_mean - 1.0).collect();

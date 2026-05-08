@@ -23,7 +23,7 @@ fn cosmic_web_pm_parses() {
 
     assert_eq!(config.simulation.grid.n_cells, 64);
     assert_eq!(config.simulation.grid.box_length, 100000.0);
-    assert_eq!(config.simulation.time.n_steps, 300);
+    assert_eq!(config.simulation.time.n_steps, 600);
     assert_eq!(config.simulation.time.stepping, "log");
 }
 
@@ -55,7 +55,7 @@ fn galaxy_group_pm_parses() {
     let dm = &config.ontology.particles["dark_matter"];
     assert_eq!(dm.count, 32768);
     assert_eq!(config.simulation.time.stepping, "linear");
-    assert_eq!(config.simulation.time.n_steps, 600);
+    assert_eq!(config.simulation.time.n_steps, 1000);
 }
 
 #[test]
@@ -218,8 +218,8 @@ fn scene_overrides_base_defaults() {
     // Scene overrides base n_cells (32 → 64)
     assert_eq!(config.simulation.grid.n_cells, 64);
 
-    // Base default for snapshot interval persists
-    assert_eq!(config.output.snapshots.interval, 1);
+    // Scene overrides base snapshot interval (1 → 5)
+    assert_eq!(config.output.snapshots.interval, 5);
 }
 
 #[test]

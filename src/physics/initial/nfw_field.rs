@@ -140,7 +140,7 @@ pub fn colliding_halos_field(
         let coherence_ratio = r_vir * v_mag / nu;
 
         eprintln!(
-            "halo {k}: |v| = {v_mag:.1} kpc/Gyr, m|v|dx/l = {nyquist_ratio:.3} (< pi = {pi:.3}), r_h*v/nu = {coherence_ratio:.2}",
+            "halo {k}:  |v| = {v_mag:.1} kpc/Gyr,  m|v|Δx / ℓ = {nyquist_ratio:.3} (< π = {pi:.3}),  r_h v / ν = {coherence_ratio:.2}",
             pi = PI,
         );
     }

@@ -57,3 +57,6 @@ interval = 1
 
 [output.diagnostics]
 interval = 10
+
+[output.display.species.alpha]
+colormap = "cool"  # blue/purple for dark matter

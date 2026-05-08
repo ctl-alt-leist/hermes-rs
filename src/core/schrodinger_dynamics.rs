@@ -48,7 +48,7 @@ impl Dynamics for SchrodingerPoissonDynamics {
         })?;
 
         let alpha = fields.alpha.as_ref().ok_or_else(|| {
-            HermesError::Config("Schrodinger dynamics requires alpha field".to_string())
+            HermesError::Config("Schrodinger dynamics requires α field".to_string())
         })?;
 
         let scale_factor = (scale_factor_prev + scale_factor_next) / 2.0;

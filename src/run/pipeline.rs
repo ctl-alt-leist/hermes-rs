@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender};
 use std::thread;
 
-use crate::colormap::colormap_hot;
+use crate::colormap::{colormap_by_name, colormap_hot};
 use crate::config::VisualizationConfig;
 use crate::io::snapshot::{Snapshot, save_snapshot};
 
@@ -279,9 +279,9 @@ pub fn precompute_frame_rayon(
                 scale_factor: snapshot.scale_factor,
             }
         }
-        SnapshotContent::Fields { density, n_cells } => {
+        SnapshotContent::Fields { species, n_cells } => {
             let n = *n_cells;
-            if n == 0 || density.is_empty() {
+            if n == 0 || species.is_empty() {
                 return DisplayFrame {
                     positions: Vec::new(),
                     colors: Vec::new(),
@@ -291,46 +291,57 @@ pub fn precompute_frame_rayon(
                 };
             }
 
-            // One point per grid cell at cell center, with a small
-            // random offset to break lattice alignment artifacts.
             use rand::Rng;
             use rand::SeedableRng;
             use rand_chacha::ChaCha20Rng;
 
             let cell_size = 1.0 / n as f64;
-            let jitter = vis.jitter * cell_size;
-
-            // Fixed colormap scale anchored to mean density.
-            let density_mean = density.iter().sum::<f64>() / density.len() as f64;
-            let log_min = (vis.colormap_range[0] * density_mean).max(1e-30).ln();
-            let log_max = (vis.colormap_range[1] * density_mean).ln();
-            let log_range = (log_max - log_min).max(1e-10);
-
+            let jitter_amount = vis.jitter * cell_size;
             let total = n * n * n;
+
             let mut out_positions = Vec::with_capacity(total);
             let mut out_colors = Vec::with_capacity(total);
 
-            // Fixed seed so jitter is stable across frames.
+            // Precompute grid positions with jitter (shared across all species).
             let mut rng = ChaCha20Rng::seed_from_u64(0);
-
-            for (flat_idx, &rho) in density.iter().enumerate() {
+            let mut positions_grid: Vec<[f32; 3]> = Vec::with_capacity(total);
+            for flat_idx in 0..total {
                 let m0 = flat_idx / (n * n);
                 let m1 = (flat_idx / n) % n;
                 let m2 = flat_idx % n;
 
-                let dx: f64 = rng.random_range(-jitter..jitter);
-                let dy: f64 = rng.random_range(-jitter..jitter);
-                let dz: f64 = rng.random_range(-jitter..jitter);
+                let dx: f64 = rng.random_range(-jitter_amount..jitter_amount);
+                let dy: f64 = rng.random_range(-jitter_amount..jitter_amount);
+                let dz: f64 = rng.random_range(-jitter_amount..jitter_amount);
 
                 let x = ((m0 as f64 + 0.5) * cell_size + dx - 0.5) as f32;
                 let y = ((m1 as f64 + 0.5) * cell_size + dy - 0.5) as f32;
                 let z = ((m2 as f64 + 0.5) * cell_size + dz - 0.5) as f32;
 
-                out_positions.push([x, y, z]);
+                positions_grid.push([x, y, z]);
+            }
 
-                let log_rho = rho.max(1e-30).ln();
-                let normalized = ((log_rho - log_min) / log_range).clamp(0.0, 1.0);
-                out_colors.push(colormap_hot(normalized));
+            // Render each field species with its own colormap.
+            for field_snapshot in species {
+                let species_config = vis.species.get(&field_snapshot.name);
+                let colormap_name = species_config.map(|c| c.colormap.as_str()).unwrap_or("hot");
+                let colormap_range = species_config
+                    .and_then(|c| c.colormap_range)
+                    .unwrap_or(vis.colormap_range);
+
+                let density = &field_snapshot.density;
+                let density_mean = density.iter().sum::<f64>() / density.len().max(1) as f64;
+                let log_min = (colormap_range[0] * density_mean).max(1e-30).ln();
+                let log_max = (colormap_range[1] * density_mean).ln();
+                let log_range = (log_max - log_min).max(1e-10);
+
+                for (flat_idx, &rho) in density.iter().enumerate() {
+                    out_positions.push(positions_grid[flat_idx]);
+
+                    let log_rho = rho.max(1e-30).ln();
+                    let normalized = ((log_rho - log_min) / log_range).clamp(0.0, 1.0);
+                    out_colors.push(colormap_by_name(colormap_name, normalized));
+                }
             }
 
             DisplayFrame {

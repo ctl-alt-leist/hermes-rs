@@ -40,13 +40,22 @@ pub enum SnapshotContent {
         momenta: Vec<Vector<3>>,
         mass_particle: f64,
     },
-    /// Field density on a grid.
+    /// Field densities on a grid, one per species.
     Fields {
-        /// Density values at each grid point (flattened).
-        density: Vec<f64>,
+        /// Per-species density data.
+        species: Vec<FieldSpeciesSnapshot>,
         /// Grid cells per side.
         n_cells: usize,
     },
+}
+
+/// Density snapshot for a single field species.
+#[derive(Debug, Clone)]
+pub struct FieldSpeciesSnapshot {
+    /// Species name (matches the key in SimulationState.fields).
+    pub name: String,
+    /// Density values at each grid point (flattened, length n_cells^3).
+    pub density: Vec<f64>,
 }
 
 impl Snapshot {
@@ -61,22 +70,25 @@ impl Snapshot {
                 Self::capture_lightweight(particles, step, scale_factor)
             }
             Content::Fields(field_state) => {
-                let (density, n_cells) = if let Some(ref alpha) = field_state.alpha {
+                let n = field_state.grid.n_cells;
+                let mut species_snapshots = Vec::new();
+
+                if let Some(ref alpha) = field_state.alpha {
                     let density_field = alpha.density(field_state.params.mass_alpha);
-                    let n = field_state.grid.n_cells;
-                    let mut density = Vec::with_capacity(n * n * n);
-                    for val in density_field.data.iter() {
-                        density.push(*val);
-                    }
-                    (density, n)
-                } else {
-                    (Vec::new(), 0)
-                };
+                    let density: Vec<f64> = density_field.data.iter().copied().collect();
+                    species_snapshots.push(FieldSpeciesSnapshot {
+                        name: "alpha".to_string(),
+                        density,
+                    });
+                }
 
                 Self {
                     step,
                     scale_factor,
-                    content: SnapshotContent::Fields { density, n_cells },
+                    content: SnapshotContent::Fields {
+                        species: species_snapshots,
+                        n_cells: n,
+                    },
                     diagnostics: DiagnosticsSummary {
                         scale_factor,
                         mass_total: 0.0,
@@ -215,8 +227,14 @@ impl Snapshot {
                 momenta: momenta.iter().map(components_from_vector).collect(),
                 mass_particle: *mass_particle,
             },
-            SnapshotContent::Fields { density, n_cells } => SnapshotContentOnDisk::Fields {
-                density: density.clone(),
+            SnapshotContent::Fields { species, n_cells } => SnapshotContentOnDisk::Fields {
+                species: species
+                    .iter()
+                    .map(|s| FieldSpeciesOnDisk {
+                        name: s.name.clone(),
+                        density: s.density.clone(),
+                    })
+                    .collect(),
                 n_cells: *n_cells,
             },
         };
@@ -241,9 +259,16 @@ impl Snapshot {
                 momenta: momenta.iter().map(|c| vector_from_array(*c)).collect(),
                 mass_particle,
             },
-            SnapshotContentOnDisk::Fields { density, n_cells } => {
-                SnapshotContent::Fields { density, n_cells }
-            }
+            SnapshotContentOnDisk::Fields { species, n_cells } => SnapshotContent::Fields {
+                species: species
+                    .into_iter()
+                    .map(|s| FieldSpeciesSnapshot {
+                        name: s.name,
+                        density: s.density,
+                    })
+                    .collect(),
+                n_cells,
+            },
         };
 
         Self {
@@ -306,9 +331,16 @@ pub enum SnapshotContentOnDisk {
         mass_particle: f64,
     },
     Fields {
-        density: Vec<f64>,
+        species: Vec<FieldSpeciesOnDisk>,
         n_cells: usize,
     },
+}
+
+/// On-disk density for a single field species.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FieldSpeciesOnDisk {
+    pub name: String,
+    pub density: Vec<f64>,
 }
 
 // ============================================================================
