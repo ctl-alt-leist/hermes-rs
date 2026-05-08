@@ -145,13 +145,22 @@ progress = true      # print step progress to terminal
 # is active (requires the "vis" feature).
 
 [output.display]
-point_size      = 5.0                    # screen-space point size (particles)
-blob_size       = 18.0                   # screen-space blob size (volumetric fields)
-blob_alpha      = 0.12                   # per-blob opacity for additive blending
-blob_falloff    = 10.0                   # Gaussian falloff rate for volumetric blobs
-camera_distance = 1.9                    # distance from origin (box is [-0.5, 0.5])
-camera_angle    = [0.56, 0.42, 0.69]    # direction unit vector (normalized * distance)
-colormap_range  = [0.3, 3.0]            # [floor, ceiling] as density / rho_mean
-jitter          = 0.3                    # grid-point jitter as fraction of cell size
-gif_resolution  = 512                    # pixel size for GIF recording
-gif_point_radius = 1                     # point radius in GIF frames
+point_size       = 5.0                    # screen-space point size (particles)
+blob_size        = 18.0                   # screen-space blob size (volumetric fields)
+blob_alpha       = 0.12                   # per-blob opacity for additive blending
+blob_falloff     = 10.0                   # Gaussian falloff rate for volumetric blobs
+camera_distance  = 1.9                    # distance from origin (box is [-0.5, 0.5])
+camera_angle     = [0.56, 0.42, 0.69]    # direction unit vector (normalized * distance)
+colormap_range   = [0.3, 3.0]            # [floor, ceiling] as density / rho_mean
+jitter           = 0.3                    # grid-point jitter as fraction of cell size
+gif_resolution   = 512                    # pixel size for GIF recording
+gif_point_radius = 1                      # point radius in GIF frames
+
+# Per-species display overrides. Scene configs add these as needed:
+#
+#   [output.display.species.alpha]
+#   colormap       = "cool"              # "hot", "cool", "ember", "verdant"
+#   colormap_range = [0.3, 3.0]          # override global range for this species
+#
+#   [output.display.species.beta]
+#   colormap       = "ember"

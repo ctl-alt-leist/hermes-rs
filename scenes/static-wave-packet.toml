@@ -42,5 +42,8 @@ momentum = [4.0, 0.0, 0.0]
 [output.snapshots]
 interval = 10
 
+[output.display.species.alpha]
+colormap = "cool"
+
 [output.diagnostics]
 interval = 50

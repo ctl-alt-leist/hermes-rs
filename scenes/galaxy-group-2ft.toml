@@ -1,15 +1,20 @@
-# Galaxy group (field theory).
+# Galaxy group (two-field theory).
 #
 # Three colliding NFW dark matter halos in an 8 Mpc box.
-# The dark matter is represented as a wavefunction alpha in the
-# even subalgebra. Density and infall velocities encoded via the
-# inverse Madelung transform with per-halo plane-wave phases.
+# Two matter fields: alpha (dark matter) and beta (baryons).
+# Both are even-subalgebra Schrodinger fields under shared
+# Poisson gravity. Beta carries a Gross-Pitaevskii self-interaction
+# that gives baryons an effective sound speed.
+#
+# The mass split follows Planck 2018: omega_b / omega_m ~ 0.156,
+# so beta carries about 15.6% of the total matter mass, and alpha
+# carries the remaining 84.4%.
 
 # ── Ontology ─────────────────────────────────────────
 
 [ontology.spacetime]
 background     = "flrw"
-hubble         = 67.4    # km/s/Mpc
+hubble         = 67.4      # km/s/Mpc
 omega_m        = 0.315
 omega_v        = 0.6849085
 omega_b        = 0.0493
@@ -17,10 +22,17 @@ sigma_8        = 0.811
 spectral_index = 0.965
 
 [ontology.fields.alpha]
-grade        = [0, 3]    # even subalgebra
-mass         = 1e10      # M_sun
-length_scale = 4000.0    # l/m: diffusivity (kpc^2 / Gyr)
+grade        = [0, 3]      # even subalgebra
+mass         = 1e10        # M_sun
+length_scale = 4000.0      # l/m: diffusivity (kpc^2 / Gyr)
 free         = "schrodinger"
+
+[ontology.fields.beta]
+grade            = [0, 3]      # even subalgebra
+mass             = 1e10        # M_sun
+length_scale     = 4000.0      # l/m: diffusivity (kpc^2 / Gyr)
+free             = "schrodinger"
+self_interaction = 1e6         # Gross-Pitaevskii coupling g (kpc^3 / Gyr^2 / M_sun)
 
 [ontology.lagrangian]
 gravity = true
@@ -41,15 +53,15 @@ method = "nfw-group"
 seed   = 42
 
 [[simulation.initialization.halos]]
-mass_fraction = 0.5263   # 1.0 / 1.9
+mass_fraction = 0.5263     # 1.0 / 1.9
 concentration = 8.0
 
 [[simulation.initialization.halos]]
-mass_fraction = 0.3158   # 0.6 / 1.9
+mass_fraction = 0.3158     # 0.6 / 1.9
 concentration = 10.0
 
 [[simulation.initialization.halos]]
-mass_fraction = 0.1579   # 0.3 / 1.9
+mass_fraction = 0.1579     # 0.3 / 1.9
 concentration = 14.0
 
 # ── Output ───────────────────────────────────────────
@@ -65,3 +77,6 @@ blob_size = 28.0
 
 [output.display.species.alpha]
 colormap = "cool"  # blue/purple for dark matter
+
+[output.display.species.beta]
+colormap = "ember"  # red/orange/gold for baryons

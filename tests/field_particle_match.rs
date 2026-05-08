@@ -114,7 +114,7 @@ fn field_and_particle_lump_track_together() {
 
     // Regime check.
     let nyquist = velocity[0] * cell_length / nu;
-    eprintln!("m|v|dx/l = {nyquist:.3} (must be < pi)");
+    eprintln!("m|v|Δx / ℓ = {nyquist:.3} (must be < π)");
     assert!(nyquist < PI, "velocity exceeds Nyquist limit");
 
     // ==================== FIELD SETUP ====================

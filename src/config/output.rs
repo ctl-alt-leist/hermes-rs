@@ -1,6 +1,8 @@
 /// Output configuration: what we record, report, and display.
 ///
 /// Parsed from the `[output]` section of the TOML config.
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 
 // ============================================================================
@@ -124,6 +126,28 @@ pub struct DisplayConfig {
     /// Point radius in pixels for GIF rendering.
     #[serde(default = "default_gif_point_radius")]
     pub gif_point_radius: i32,
+    /// Per-species display overrides, keyed by species name.
+    ///
+    /// Each entry specifies the colormap and optional range for a
+    /// field species. Species not listed here use "hot" with the
+    /// global colormap_range.
+    #[serde(default)]
+    pub species: BTreeMap<String, SpeciesDisplayConfig>,
+}
+
+/// Per-species visualization settings.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SpeciesDisplayConfig {
+    /// Colormap name: "hot", "cool", "ember", "verdant".
+    #[serde(default = "default_colormap")]
+    pub colormap: String,
+    /// Colormap range as [floor, ceiling] in density / rho_mean.
+    /// If absent, falls back to the global colormap_range.
+    pub colormap_range: Option<[f64; 2]>,
+}
+
+fn default_colormap() -> String {
+    "hot".to_string()
 }
 
 fn default_point_size() -> f32 {
@@ -170,6 +194,7 @@ impl Default for DisplayConfig {
             jitter: default_jitter(),
             gif_resolution: default_gif_resolution(),
             gif_point_radius: default_gif_point_radius(),
+            species: BTreeMap::new(),
         }
     }
 }

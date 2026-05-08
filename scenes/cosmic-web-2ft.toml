@@ -1,14 +1,18 @@
-# Cosmic web (field theory).
+# Cosmic web (two-field theory).
 #
-# Schrodinger-Poisson dark matter wavefunction in a 10 Mpc periodic box.
-# The field alpha lives in the even subalgebra (grades 0 + 3) and
-# evolves under its free Schrodinger kinetic term plus Poisson gravity.
+# Two Schrodinger-Poisson fields in a 10 Mpc periodic box:
+# alpha (dark matter) and beta (baryons with self-interaction).
+# Both fields live in the even subalgebra and evolve under
+# shared Poisson gravity. Beta carries a Gross-Pitaevskii
+# self-interaction providing an effective sound speed.
+#
+# Mass split follows Planck 2018: omega_b / omega_m ~ 0.156.
 
 # ── Ontology ─────────────────────────────────────────
 
 [ontology.spacetime]
 background     = "flrw"
-hubble         = 67.4    # km/s/Mpc
+hubble         = 67.4      # km/s/Mpc
 omega_m        = 0.315
 omega_v        = 0.6849085
 omega_b        = 0.0493
@@ -16,10 +20,17 @@ sigma_8        = 0.811
 spectral_index = 0.965
 
 [ontology.fields.alpha]
-grade        = [0, 3]    # even subalgebra
-mass         = 1e10      # M_sun
-length_scale = 2000.0    # l/m: diffusivity (kpc^2 / Gyr)
+grade        = [0, 3]      # even subalgebra
+mass         = 1e10        # M_sun
+length_scale = 2000.0      # l/m: diffusivity (kpc^2 / Gyr)
 free         = "schrodinger"
+
+[ontology.fields.beta]
+grade            = [0, 3]      # even subalgebra
+mass             = 1e10        # M_sun
+length_scale     = 2000.0      # l/m: diffusivity (kpc^2 / Gyr)
+free             = "schrodinger"
+self_interaction = 1e6         # Gross-Pitaevskii coupling g (kpc^3 / Gyr^2 / M_sun)
 
 [ontology.lagrangian]
 gravity = true
@@ -51,3 +62,6 @@ interval = 10
 
 [output.display.species.alpha]
 colormap = "cool"  # blue/purple for dark matter
+
+[output.display.species.beta]
+colormap = "ember"  # red/orange/gold for baryons

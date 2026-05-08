@@ -90,8 +90,8 @@ fn lump_translates_under_cosmological_sp_dynamics() {
 
     // Regime diagnostics.
     let v_mag = velocity[0];
-    eprintln!("m|v|dx/l = {:.3} (limit: pi)", v_mag * cell_length / nu);
-    eprintln!("r*v/nu = {:.2}", sigma * v_mag / nu);
+    eprintln!("m|v|Δx / ℓ = {:.3} (limit: π)", v_mag * cell_length / nu);
+    eprintln!("r v / ν = {:.2}", sigma * v_mag / nu);
 
     let alpha = EvenField::from_fn(&morphis_grid, g, |x| {
         let mut r2 = 0.0;

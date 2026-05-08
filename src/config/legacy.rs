@@ -3,10 +3,12 @@
 /// These types parse the old flat TOML format (configs/defaults.toml).
 /// They remain in use by the existing simulation driver, scenes, and
 /// runner code. New code should use EngineConfig instead.
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::Deserialize;
 
+use crate::config::output::SpeciesDisplayConfig;
 use crate::error::HermesError;
 use crate::physics::cosmology::Cosmology;
 
@@ -134,6 +136,9 @@ pub struct VisualizationConfig {
     pub gif_resolution: u32,
     /// Point radius in pixels for GIF rendering.
     pub gif_point_radius: i32,
+    /// Per-species display overrides, keyed by species name.
+    #[serde(default)]
+    pub species: BTreeMap<String, SpeciesDisplayConfig>,
 }
 
 impl Default for VisualizationConfig {
@@ -149,6 +154,7 @@ impl Default for VisualizationConfig {
             jitter: 0.3,
             gif_resolution: 512,
             gif_point_radius: 1,
+            species: BTreeMap::new(),
         }
     }
 }
@@ -226,6 +232,7 @@ impl Configuration {
                 jitter: engine.output.display.jitter,
                 gif_resolution: engine.output.display.gif_resolution,
                 gif_point_radius: engine.output.display.gif_point_radius,
+                species: engine.output.display.species.clone(),
             },
         }
     }

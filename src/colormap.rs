@@ -1,13 +1,40 @@
 //! Density colormapping for cosmological visualization.
+//!
+//! Each colormap maps a normalized value in [0, 1] to an RGB triple
+//! suitable for additive blending on a dark background. Multiple
+//! colormaps allow distinct field species to be visually separated
+//! when rendered together.
 
 use crate::physics::cic::assign_density;
 use crate::physics::grid::Grid;
 use crate::physics::particles::Particles;
 
-/// Map a normalized value in [0, 1] to an RGB color on a hot colormap.
+// ============================================================================
+// Colormap registry
+// ============================================================================
+
+/// Look up a colormap by name.
 ///
-/// The colormap runs: black → deep blue → cyan → white, designed
-/// for cosmological density fields on a dark background.
+/// Returns the hot (blue → cyan → white) colormap as fallback for
+/// unrecognized names.
+pub fn colormap_by_name(name: &str, value: f64) -> [f32; 3] {
+    match name {
+        "hot" => colormap_hot(value),
+        "cool" => colormap_cool(value),
+        "ember" => colormap_ember(value),
+        "verdant" => colormap_verdant(value),
+        _ => colormap_hot(value),
+    }
+}
+
+// ============================================================================
+// Individual colormaps
+// ============================================================================
+
+/// Hot: black → deep blue → cyan → white.
+///
+/// The default for dark matter (α). Designed for density fields
+/// on a dark background with additive blending.
 pub fn colormap_hot(value: f64) -> [f32; 3] {
     let t = value.clamp(0.0, 1.0) as f32;
 
@@ -16,6 +43,46 @@ pub fn colormap_hot(value: f64) -> [f32; 3] {
     let b = (2.0 * t)
         .clamp(0.0, 1.0)
         .min(1.0 - (3.0 * t - 2.5).clamp(0.0, 1.0));
+
+    [r, g, b]
+}
+
+/// Cool: black → deep indigo → blue-violet → lavender → white.
+///
+/// A blue/purple palette for dark matter (α). Distinct from warm
+/// palettes at all density levels.
+pub fn colormap_cool(value: f64) -> [f32; 3] {
+    let t = value.clamp(0.0, 1.0) as f32;
+
+    let r = (2.5 * t - 1.2).clamp(0.0, 1.0);
+    let g = (2.5 * t - 1.5).clamp(0.0, 1.0);
+    let b = (2.0 * t).clamp(0.0, 1.0);
+
+    [r, g, b]
+}
+
+/// Ember: black → dark red → orange → gold → white.
+///
+/// A warm red/yellow palette for baryonic matter (β).
+pub fn colormap_ember(value: f64) -> [f32; 3] {
+    let t = value.clamp(0.0, 1.0) as f32;
+
+    let r = (2.0 * t).clamp(0.0, 1.0);
+    let g = (2.5 * t - 1.0).clamp(0.0, 1.0);
+    let b = (4.0 * t - 3.0).clamp(0.0, 1.0);
+
+    [r, g, b]
+}
+
+/// Verdant: black → dark green → lime → white.
+///
+/// A green palette for additional species.
+pub fn colormap_verdant(value: f64) -> [f32; 3] {
+    let t = value.clamp(0.0, 1.0) as f32;
+
+    let r = (2.0 * t - 1.0).clamp(0.0, 1.0);
+    let g = (2.5 * t).clamp(0.0, 1.0);
+    let b = (3.0 * t - 2.5).clamp(0.0, 1.0);
 
     [r, g, b]
 }

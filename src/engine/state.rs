@@ -35,6 +35,10 @@ pub struct FieldEntry {
     pub smoothing_length: f64,
     /// Field mass parameter in M_sun.
     pub mass: f64,
+    /// Gross-Pitaevskii self-interaction coupling constant.
+    /// None for free Schrodinger fields; Some(g) for fields with
+    /// a |psi|^2 self-interaction in the potential.
+    pub self_interaction: Option<f64>,
 }
 
 impl SimulationState {

@@ -16,9 +16,11 @@ use morphis::grid::Grid as MorphisGrid;
 use morphis::metric::euclidean;
 
 use hermes_rs::engine::Engine;
-use hermes_rs::engine::coupling::poisson::PoissonGravity;
 use hermes_rs::engine::free::FreeEvolution;
 use hermes_rs::engine::free::schrodinger::SchrodingerEvolution;
+use hermes_rs::engine::sector::Sector;
+use hermes_rs::engine::sector::schrodinger::SchrodingerSector;
+use hermes_rs::engine::solver::GravitySolver;
 use hermes_rs::engine::state::{FieldEntry, SimulationState};
 use hermes_rs::physics::cosmology::planck_2018;
 use hermes_rs::physics::grid::Grid;
@@ -148,7 +150,7 @@ fn log_regime(
     let coherence_ratio = lump_radius * v_mag / nu;
 
     eprintln!(
-        "{label}: |v| = {v_mag:.1} kpc/Gyr, m|v|dx/l = {nyquist_ratio:.3} (limit: pi = {pi:.3}), r*v/nu = {coherence_ratio:.2}",
+        "{label}:  |v| = {v_mag:.1} kpc/Gyr,  m|v|Δx / ℓ = {nyquist_ratio:.3} (limit: π = {pi:.3}),  r v / ν = {coherence_ratio:.2}",
         pi = PI,
     );
 }
@@ -200,6 +202,7 @@ fn single_lump_translates_under_kinetic_evolution() {
         data: alpha,
         smoothing_length: ell,
         mass,
+        self_interaction: None,
     };
 
     // Evolve under kinetic operator only (no gravity, no expansion).
@@ -323,6 +326,7 @@ fn two_lumps_pass_through_under_kinetic_evolution() {
         data: alpha,
         smoothing_length: ell,
         mass,
+        self_interaction: None,
     };
 
     // Evolve long enough for lumps to cross and separate.
@@ -411,28 +415,25 @@ fn two_lumps_attract_under_gravity() {
             data: alpha,
             smoothing_length: ell,
             mass,
+            self_interaction: None,
         },
     );
 
-    let mut free_modules: BTreeMap<String, Box<dyn FreeEvolution>> = BTreeMap::new();
-    free_modules.insert("alpha".to_string(), Box::new(SchrodingerEvolution));
+    let sectors: Vec<Box<dyn Sector>> = vec![Box::new(SchrodingerSector::new("alpha".to_string()))];
 
-    let gravity = PoissonGravity::new(hermes_grid.clone());
+    let solver = GravitySolver::new(morphis_grid);
     let cosmology = planck_2018();
 
-    let mut engine = Engine {
-        state: SimulationState {
-            particles: BTreeMap::new(),
-            fields,
-            grid: hermes_grid,
-            morphis_grid,
-            time: 0.0,
-            step: 0,
-        },
-        free_modules,
-        couplings: vec![Box::new(gravity)],
-        cosmology: Some(cosmology),
+    let state = SimulationState {
+        particles: BTreeMap::new(),
+        fields,
+        grid: hermes_grid,
+        morphis_grid,
+        time: 0.0,
+        step: 0,
     };
+
+    let mut engine = Engine::new(state, sectors, Some(solver), Some(cosmology));
 
     let dt = 0.01;
     let n_steps = 30;
@@ -558,7 +559,7 @@ fn galaxy_group_field_initializes_with_nonzero_velocity() {
     eprintln!("peak density at {max_idx:?}: rho = {max_density:.2}");
     eprintln!("velocity at peak: ({vx:.2}, {vy:.2}, {vz:.2}), |v| = {v_mag:.2} kpc/Gyr");
     eprintln!(
-        "phase-Nyquist ratio: m|v|dx/l = {:.4}",
+        "phase-Nyquist ratio: m|v|Δx / ℓ = {:.4}",
         mass * v_mag * (box_length / n as f64) / ell
     );
 

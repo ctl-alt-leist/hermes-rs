@@ -124,6 +124,9 @@ pub struct FieldSpecies {
     pub free: Option<String>,
     /// Propagation speed in km/s. Only for wave fields.
     pub speed: Option<f64>,
+    /// Gross-Pitaevskii self-interaction coupling constant.
+    /// Units: kpc^3 / Gyr^2 / M_sun. Only for Schrodinger fields.
+    pub self_interaction: Option<f64>,
     /// Electric charge (for electromagnetic coupling). Defaults to 0.
     #[serde(default)]
     pub charge: f64,
