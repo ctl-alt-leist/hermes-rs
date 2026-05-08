@@ -1,61 +1,147 @@
 # Species Specification: Design Notes
 
-Notes on the eventual design for user-defined species — the layer above the plumbing. The multi-species pipeline (snapshots, visualization, engine composition) is being built now; this document collects first thoughts on the physics-specification layer that will sit on top of it.
+Notes on the design for user-defined species — the layer above the plumbing.
 
-The goal is that a user writes a TOML config declaring an arbitrary collection of named species — fields and particles — each with its geometry, dynamics, couplings, and visualization. Nothing is hardcoded to "alpha" or "dark matter." The framework dispatches initialization, evolution, and rendering from the config alone.
+The goal: a user writes a TOML config declaring an arbitrary collection of named species — fields
+and particles — each with its geometry, dynamics, couplings, and visualization. Nothing is hardcoded.
+The framework dispatches initialization, evolution, and rendering from the config alone.
 
-## Fields: Geometry and Lagrangian
+## Naming
 
-A field species should be fully specified by:
+Two levels of identity per species:
 
-1. **Algebraic grade** — already in config as `grade = [0, 3]` (even subalgebra), `grade = 0` (scalar), `grade = 2` (bivector). This determines what kind of object lives at each grid point.
+- **Name** — the TOML key. Human-readable, used as the BTreeMap key everywhere in the code, in
+  snapshot species labels, in coupling references, in visualization config lookups.
+  Examples: `"dark matter"`, `"baryonic matter"`, `"magnetic field"`.
 
-2. **Lagrangian form** — first-degree (Schrodinger-type, norm-preserving) or second-degree (wave-equation, propagating). Currently handled by the `free` string ("schrodinger", "wave"). This could become richer: the form determines the sector type, the elementary flows, and the conservation laws.
+- **Symbol** — a Unicode display character for diagnostics and visualization labels.
+  Examples: `"α"`, `"β"`, `"γ"`, `"φ"`.
 
-3. **Self-interaction** — currently `self_interaction` for Gross-Pitaevskii. More general: any scalar function of the field's norm, specified as a potential `V(|psi|^2)`. The simplest cases (quadratic mass, quartic GP) cover most near-term needs. Whether to support arbitrary user-defined potentials or a menu of named options is an open question.
+```toml
+[ontology.fields."dark matter"]
+symbol = "α"
+grade  = [0, 3]
+n      = 64
+# ...
+```
 
-4. **Name and symbol** — the TOML key is the name. A display symbol (Unicode Greek letter) could be added for visualization labels and diagnostics output. E.g., `symbol = "α"` in the config, used by the pipeline for legends and by diagnostics for conservation readouts.
+## Fields
 
-The science notes (section 1.13, "From Geometric Specification to Lagrangian") lay out a seven-step recipe for constructing a sector's Lagrangian from its grade and desired physics. The question is whether this recipe should be encoded in the config (declarative: "I want a first-degree even-subalgebra field with quartic self-interaction") or remain a paper-to-code workflow where the user writes a Sector implementation. The declarative approach is cleaner for standard cases; custom Sector implementations handle anything exotic.
+A field species is specified by:
 
-## Particles: Properties and Forces
+```toml
+[ontology.fields."dark matter"]
+symbol           = "α"
+grade            = [0, 3]          # even subalgebra
+n                = 64              # cells per side (n³ grid points)
+mass             = 1e10            # M_sun
+length_scale     = 4000.0          # l/m: diffusivity (kpc² / Gyr)
+free             = "schrodinger"   # Lagrangian form
+self_interaction = 1e6             # Gross-Pitaevskii coupling (optional)
+```
 
-A particle species should be specified by:
+- **`grade`** — algebraic grade in the geometric algebra. Determines the target subspace.
+- **`free`** — Lagrangian form: `"schrodinger"` (first-degree, norm-preserving) or
+  `"wave"` (second-degree, propagating). Determines which Sector implementation the engine
+  constructs.
+- **`self_interaction`** — optional quartic (Gross-Pitaevskii) coupling constant. When present,
+  the engine uses a GrossPitaevskiiSector instead of a SchrodingerSector.
+- **`n`** — grid cells per side (total grid points = n³). Same parameter name as particles.
 
-1. **Count and mass** — already in config.
-2. **Charge** — already in config (for electromagnetic coupling, unused so far).
-3. **Softening** — gravitational softening length, needed for particle-particle interactions. Currently implicit in the Poisson solver's Green's function; should be per-species and explicit.
-4. **Deposition kernel** — CIC, TSC, or higher. Currently hardcoded to CIC. Should be per-species or at least per-simulation.
+The engine reads `free` and `self_interaction` to dispatch the correct sector type automatically.
+Custom Sector implementations handle anything beyond the standard menu.
 
-Particles don't have Lagrangians in the same sense as fields — their dynamics are Hamilton's equations with forces interpolated from the grid. The "evolution rule" for particles is the force law, which comes from the coupling structure rather than from a per-species Lagrangian. The interesting physics questions are about what forces act on each particle species and how those forces are computed.
+## Particles
 
-## Couplings: Which Species Talk to Which
+A particle species is specified by:
 
-The current config has `gravity = true` (universal, all massive species) and `electromagnetic = ["beta", "gamma"]` (selective). This is the right structure but needs to grow.
+```toml
+[ontology.particles."dark matter"]
+symbol    = "α"
+n         = 64           # particles per side (n³ total)
+mass      = 1e10         # M_sun per particle
+softening = 50.0         # gravitational softening length (kpc)
+kernel    = "cic"        # deposition kernel: "cic", "tsc", "pcs"
+```
 
-Near-term additions:
+- **`n`** — particles per side (total count = n³). Consistent with field `n`.
+- **`softening`** — spatial extent of the particle. Applied in the Poisson solver's Green's
+  function. Per-species because different populations can have different effective sizes.
+- **`kernel`** — deposition/interpolation kernel. Per-species for flexibility, though most
+  simulations will use the same kernel for all species. Default: `"cic"`.
 
-- **Gravitational mass fraction** — when multiple field species share a Poisson potential, how much of the total density does each contribute? Currently computed from `mass * |psi|^2`; for cosmological splits (dark matter vs baryons), the mass parameters handle this naturally. But if two species have the same mass parameter, we might want explicit density weights.
+## Couplings
 
-- **Coupling constants** — the gravitational constant G is universal, but other couplings (electromagnetic, baryon-magnetic) have per-pair coupling strengths. The config should specify these on the coupling entry.
+Couplings are declared as a list of interaction terms. Each entry names its kind, lists
+participating species, and carries coupling-specific parameters.
 
-- **Coupling topology** — which species source which potentials. The current architecture (all sectors deposit into one gravity solver) works for universal gravity. For selective couplings (only baryons source the magnetic field), we need a way to say "species X sources coupling Y but species Z does not." The `electromagnetic = ["beta", "gamma"]` pattern is a start.
+```toml
+[[ontology.coupling]]
+kind    = "gravity"
+species = ["dark matter", "baryonic matter"]
 
-Longer-term, the coupling specification merges with the Lagrangian specification: the joint Lagrangian has free terms (per-species) and interaction terms (per-pair), and the config declares both. The engine reads the joint Lagrangian and constructs the appropriate sectors and solvers. This is the full vision from the science notes; the near-term steps are incremental moves toward it.
+[[ontology.coupling]]
+kind    = "electromagnetic"
+species = [
+    { name = "baryonic matter", charge = 1.0 },
+    { name = "magnetic field" },
+]
+```
 
-## Visualization: Per-Species Rendering
+- **`gravity`** — universal Poisson coupling. All listed species deposit density and feel the
+  resulting potential. The gravitational constant G is universal; no per-pair parameters needed.
+- **`electromagnetic`** — selective coupling with per-species charge. Charge lives on the coupling
+  entry, not on the species, because it describes how a species participates in a specific
+  interaction.
 
-Already implemented: per-species colormaps via `[output.display.species.<name>]`. Future additions:
+Future coupling kinds: baryon pressure, magnetic sourcing, custom closure terms.
 
-- **Display symbol** — a Unicode character shown in legends and diagnostics. `symbol = "α"` in the species config.
-- **Render mode per species** — some species might render as volumetric blobs, others as points, others as streamlines (for vector/bivector fields). Currently all fields are volumetric and all particles are points; the render mode could be per-species.
-- **Opacity and size per species** — override `blob_alpha`, `blob_size` per species for visual emphasis (e.g., dim the dark matter, brighten baryons).
-- **Slice rendering** — 2D density slices through the box, one per species, as a diagnostic output.
+## Visualization
 
-## What We Build Now vs. Later
+Per-species display config via `[output.display.species."<name>"]`:
 
-**Now (plumbing):** Unified snapshot format with named species, `Snapshot::capture_from_state`, per-species particle visualization, ParticleSector, retire hardcoded Content types from the engine path. This makes arbitrary named species flow end-to-end without caring what physics they carry.
+```toml
+[output.display.species."dark matter"]
+colormap       = "cool"
+colormap_range = [0.3, 3.0]
+blob_size      = 28.0
+blob_alpha     = 0.08
+render_mode    = "volumetric"
 
-**Next conversation:** Lagrangian-form dispatch from config (declarative sector construction for standard cases), coupling topology in config, per-species softening and deposition kernels for particles.
+[output.display.species."baryonic matter"]
+colormap    = "ember"
+blob_alpha  = 0.15
+render_mode = "volumetric"
+```
 
-**Later:** Full Lagrangian specification in config or code, gauge couplings, non-Abelian structure, sub-grid closures from the multi-scale machinery.
+- **`colormap`** — named colormap: `"hot"`, `"cool"`, `"ember"`, `"verdant"`.
+- **`colormap_range`** — density floor/ceiling in units of rho_mean. Falls back to global default.
+- **`blob_size`**, **`blob_alpha`** — per-species rendering overrides.
+- **`render_mode`** — `"volumetric"` (blobs), `"points"`, or `"streamlines"` (future).
+  Default: `"volumetric"` for fields, `"points"` for particles.
+
+## Sector Dispatch
+
+The engine constructs sectors automatically from the config:
+
+| `free` value     | `self_interaction` | Sector type              |
+| ---------------- | ------------------ | ------------------------ |
+| `"schrodinger"`  | absent             | `SchrodingerSector`      |
+| `"schrodinger"`  | present            | `GrossPitaevskiiSector`  |
+| `"wave"`         | —                  | `WaveSector` (future)    |
+| (particles)      | —                  | `ParticleSector`         |
+
+This dispatch table is the bridge between declarative config and the engine's trait-based
+architecture. Adding a new sector type means adding a row to the table and implementing the
+Sector trait.
+
+## What to Build Now
+
+1. Add `name` (from TOML key) and `symbol` to `FieldSpecies` and `ParticleSpecies`.
+2. Change particle `count` to `n` (per side, total = n³). Match field `n`.
+3. Remove `charge` from species configs (move to coupling entries when EM is built).
+4. Add `blob_size`, `blob_alpha`, `render_mode` to `SpeciesDisplayConfig`.
+5. Wire symbol through to diagnostics and print statements.
+6. Build sector dispatch from config (auto-construct sectors from `free` + `self_interaction`).
+7. Restructure `[ontology.lagrangian]` into `[[ontology.coupling]]` list.
+8. Update all scene TOMLs.

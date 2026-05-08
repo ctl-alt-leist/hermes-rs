@@ -1,8 +1,6 @@
 # Cosmic web (field theory).
 #
-# Schrodinger-Poisson dark matter wavefunction in a 10 Mpc periodic box.
-# The field alpha lives in the even subalgebra (grades 0 + 3) and
-# evolves under its free Schrodinger kinetic term plus Poisson gravity.
+# Schrodinger-Poisson dark matter field in a 10 Mpc periodic box.
 
 # ── Ontology ─────────────────────────────────────────
 
@@ -15,14 +13,16 @@ omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
 
-[ontology.fields.alpha]
-grade        = [0, 3]    # even subalgebra
-mass         = 1e10      # M_sun
-length_scale = 2000.0    # l/m: diffusivity (kpc^2 / Gyr)
+[ontology.fields."dark matter"]
+symbol       = "α"
+grade        = [0, 3]      # even subalgebra
+mass         = 1e10        # M_sun
+length_scale = 2000.0      # l/m: diffusivity (kpc² / Gyr)
 free         = "schrodinger"
 
-[ontology.lagrangian]
-gravity = true
+[[ontology.coupling]]
+kind    = "gravity"
+species = ["dark matter"]
 
 # ── Simulation ───────────────────────────────────────
 
@@ -49,5 +49,5 @@ interval = 1
 [output.diagnostics]
 interval = 10
 
-[output.display.species.alpha]
-colormap = "cool"  # blue/purple for dark matter
+[output.display.species."dark matter"]
+colormap = "cool"

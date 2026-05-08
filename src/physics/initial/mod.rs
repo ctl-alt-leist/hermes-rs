@@ -61,7 +61,7 @@ pub fn initialize_from_config(
                 .particles
                 .values()
                 .next()
-                .map(|p| (p.count as f64).cbrt().round() as usize)
+                .map(|p| p.n)
                 .unwrap_or(32);
 
             let particles = zeldovich::zeldovich_init(
@@ -132,7 +132,7 @@ pub fn initialize_from_config(
                 .particles
                 .values()
                 .next()
-                .map(|p| (p.count as f64).cbrt().round() as usize)
+                .map(|p| p.n)
                 .unwrap_or(32);
 
             let halos = halo_configs_from_config(config);

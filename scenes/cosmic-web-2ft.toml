@@ -1,10 +1,8 @@
 # Cosmic web (two-field theory).
 #
-# Two Schrodinger-Poisson fields in a 10 Mpc periodic box:
-# alpha (dark matter) and beta (baryons with self-interaction).
-# Both fields live in the even subalgebra and evolve under
-# shared Poisson gravity. Beta carries a Gross-Pitaevskii
-# self-interaction providing an effective sound speed.
+# Two Schrodinger-Poisson fields in a 10 Mpc periodic box.
+# Baryonic matter carries a Gross-Pitaevskii self-interaction
+# providing an effective sound speed.
 #
 # Mass split follows Planck 2018: omega_b / omega_m ~ 0.156.
 
@@ -19,21 +17,24 @@ omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
 
-[ontology.fields.alpha]
+[ontology.fields."dark matter"]
+symbol       = "α"
 grade        = [0, 3]      # even subalgebra
 mass         = 1e10        # M_sun
-length_scale = 2000.0      # l/m: diffusivity (kpc^2 / Gyr)
+length_scale = 2000.0      # l/m: diffusivity (kpc² / Gyr)
 free         = "schrodinger"
 
-[ontology.fields.beta]
+[ontology.fields."baryonic matter"]
+symbol           = "β"
 grade            = [0, 3]      # even subalgebra
 mass             = 1e10        # M_sun
-length_scale     = 2000.0      # l/m: diffusivity (kpc^2 / Gyr)
+length_scale     = 2000.0      # l/m: diffusivity (kpc² / Gyr)
 free             = "schrodinger"
-self_interaction = 1e6         # Gross-Pitaevskii coupling g (kpc^3 / Gyr^2 / M_sun)
+self_interaction = 1e6         # Gross-Pitaevskii coupling (kpc³ / Gyr² / M_sun)
 
-[ontology.lagrangian]
-gravity = true
+[[ontology.coupling]]
+kind    = "gravity"
+species = ["dark matter", "baryonic matter"]
 
 # ── Simulation ───────────────────────────────────────
 
@@ -60,8 +61,8 @@ interval = 1
 [output.diagnostics]
 interval = 10
 
-[output.display.species.alpha]
-colormap = "cool"  # blue/purple for dark matter
+[output.display.species."dark matter"]
+colormap = "cool"
 
-[output.display.species.beta]
-colormap = "ember"  # red/orange/gold for baryons
+[output.display.species."baryonic matter"]
+colormap = "ember"

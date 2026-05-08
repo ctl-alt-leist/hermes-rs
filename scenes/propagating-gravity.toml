@@ -1,15 +1,9 @@
 # Propagating gravity (aspirational).
 #
 # Dark matter particles with gravity mediated by a dynamical
-# scalar field phi, rather than the instantaneous Poisson solve.
+# scalar field, rather than the instantaneous Poisson solve.
 # The gravitational field propagates at speed c_g and carries
 # its own energy and momentum.
-#
-# When [ontology.fields.phi] is present with free = "wave",
-# the engine evolves phi dynamically. When it is absent,
-# gravity is instantaneous (Poisson). The coupling Lagrangian
-# is the same either way; the difference is whether the
-# mediator has its own dynamics.
 
 # ── Ontology ─────────────────────────────────────────
 
@@ -22,17 +16,20 @@ omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
 
-[ontology.particles.dark_matter]
-count = 262144  # 64^3
-mass  = 1e10    # M_sun
+[ontology.particles."dark matter"]
+symbol = "α"
+n      = 64        # particles per side (64³ total)
+mass   = 1e10      # M_sun
 
-[ontology.fields.phi]
-grade = 0        # scalar
-free  = "wave"
-speed = 3e5      # km/s (gravitational signal speed)
+[ontology.fields."gravitational field"]
+symbol = "φ"
+grade  = 0         # scalar
+free   = "wave"
+speed  = 3e5       # km/s (gravitational signal speed)
 
-[ontology.lagrangian]
-gravity = true
+[[ontology.coupling]]
+kind    = "gravity"
+species = ["dark matter", "gravitational field"]
 
 # ── Simulation ───────────────────────────────────────
 
@@ -58,5 +55,5 @@ interval = 1
 [output.diagnostics]
 interval = 10
 
-[output.display.species.alpha]
-colormap = "cool"  # blue/purple for dark matter
+[output.display.species."dark matter"]
+colormap = "cool"

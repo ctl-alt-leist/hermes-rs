@@ -1,9 +1,9 @@
 # Galaxy group (field theory).
 #
 # Three colliding NFW dark matter halos in an 8 Mpc box.
-# The dark matter is represented as a wavefunction alpha in the
-# even subalgebra. Density and infall velocities encoded via the
-# inverse Madelung transform with per-halo plane-wave phases.
+# The dark matter is represented as a field in the even subalgebra.
+# Density and infall velocities encoded via the inverse Madelung
+# transform with per-halo plane-wave phases.
 
 # ── Ontology ─────────────────────────────────────────
 
@@ -16,14 +16,16 @@ omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
 
-[ontology.fields.alpha]
-grade        = [0, 3]    # even subalgebra
-mass         = 1e10      # M_sun
-length_scale = 4000.0    # l/m: diffusivity (kpc^2 / Gyr)
+[ontology.fields."dark matter"]
+symbol       = "α"
+grade        = [0, 3]      # even subalgebra
+mass         = 1e10        # M_sun
+length_scale = 4000.0      # l/m: diffusivity (kpc² / Gyr)
 free         = "schrodinger"
 
-[ontology.lagrangian]
-gravity = true
+[[ontology.coupling]]
+kind    = "gravity"
+species = ["dark matter"]
 
 # ── Simulation ───────────────────────────────────────
 
@@ -41,15 +43,15 @@ method = "nfw-group"
 seed   = 42
 
 [[simulation.initialization.halos]]
-mass_fraction = 0.5263   # 1.0 / 1.9
+mass_fraction = 0.5263     # 1.0 / 1.9
 concentration = 8.0
 
 [[simulation.initialization.halos]]
-mass_fraction = 0.3158   # 0.6 / 1.9
+mass_fraction = 0.3158     # 0.6 / 1.9
 concentration = 10.0
 
 [[simulation.initialization.halos]]
-mass_fraction = 0.1579   # 0.3 / 1.9
+mass_fraction = 0.1579     # 0.3 / 1.9
 concentration = 14.0
 
 # ── Output ───────────────────────────────────────────
@@ -63,5 +65,5 @@ interval = 10
 [output.display]
 blob_size = 28.0
 
-[output.display.species.alpha]
-colormap = "cool"  # blue/purple for dark matter
+[output.display.species."dark matter"]
+colormap = "cool"

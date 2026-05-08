@@ -1,8 +1,7 @@
 # Galaxy group (particle-mesh).
 #
 # Three colliding NFW dark matter halos in an 8 Mpc box.
-# Initialized at z = 0 and evolved forward ~15 Gyr to watch
-# the merger unfold under Poisson gravity.
+# Dark matter represented as N-body particles with CIC deposition.
 
 # ── Ontology ─────────────────────────────────────────
 
@@ -15,17 +14,19 @@ omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
 
-[ontology.particles.dark_matter]
-count = 32768  # 32^3
-mass  = 1e10   # M_sun
+[ontology.particles."dark matter"]
+symbol = "α"
+n      = 32        # particles per side (32³ = 32768 total)
+mass   = 1e10      # M_sun per particle
 
-[ontology.lagrangian]
-gravity = true
+[[ontology.coupling]]
+kind    = "gravity"
+species = ["dark matter"]
 
 # ── Simulation ───────────────────────────────────────
 
 [simulation.grid]
-n_cells    = 32
+n_cells    = 64
 box_length = 8000.0  # kpc (8 Mpc)
 
 [simulation.time]
@@ -38,15 +39,15 @@ method = "nfw-group"
 seed   = 42
 
 [[simulation.initialization.halos]]
-mass_fraction = 0.5263   # 1.0 / 1.9
+mass_fraction = 0.5263     # 1.0 / 1.9
 concentration = 8.0
 
 [[simulation.initialization.halos]]
-mass_fraction = 0.3158   # 0.6 / 1.9
+mass_fraction = 0.3158     # 0.6 / 1.9
 concentration = 10.0
 
 [[simulation.initialization.halos]]
-mass_fraction = 0.1579   # 0.3 / 1.9
+mass_fraction = 0.1579     # 0.3 / 1.9
 concentration = 14.0
 
 # ── Output ───────────────────────────────────────────
@@ -57,5 +58,5 @@ interval = 1
 [output.diagnostics]
 interval = 10
 
-[output.display.species.dark_matter]
-colormap = "cool"  # blue/purple for dark matter
+[output.display.species."dark matter"]
+colormap = "cool"

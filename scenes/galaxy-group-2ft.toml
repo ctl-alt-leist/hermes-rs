@@ -1,14 +1,11 @@
 # Galaxy group (two-field theory).
 #
 # Three colliding NFW dark matter halos in an 8 Mpc box.
-# Two matter fields: alpha (dark matter) and beta (baryons).
-# Both are even-subalgebra Schrodinger fields under shared
-# Poisson gravity. Beta carries a Gross-Pitaevskii self-interaction
-# that gives baryons an effective sound speed.
+# Two matter fields under shared Poisson gravity. Baryonic matter
+# carries a Gross-Pitaevskii self-interaction providing an effective
+# sound speed.
 #
-# The mass split follows Planck 2018: omega_b / omega_m ~ 0.156,
-# so beta carries about 15.6% of the total matter mass, and alpha
-# carries the remaining 84.4%.
+# Mass split follows Planck 2018: omega_b / omega_m ~ 0.156.
 
 # ── Ontology ─────────────────────────────────────────
 
@@ -21,21 +18,24 @@ omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
 
-[ontology.fields.alpha]
+[ontology.fields."dark matter"]
+symbol       = "α"
 grade        = [0, 3]      # even subalgebra
 mass         = 1e10        # M_sun
-length_scale = 4000.0      # l/m: diffusivity (kpc^2 / Gyr)
+length_scale = 4000.0      # l/m: diffusivity (kpc² / Gyr)
 free         = "schrodinger"
 
-[ontology.fields.beta]
+[ontology.fields."baryonic matter"]
+symbol           = "β"
 grade            = [0, 3]      # even subalgebra
 mass             = 1e10        # M_sun
-length_scale     = 4000.0      # l/m: diffusivity (kpc^2 / Gyr)
+length_scale     = 4000.0      # l/m: diffusivity (kpc² / Gyr)
 free             = "schrodinger"
-self_interaction = 1e6         # Gross-Pitaevskii coupling g (kpc^3 / Gyr^2 / M_sun)
+self_interaction = 1e6         # Gross-Pitaevskii coupling (kpc³ / Gyr² / M_sun)
 
-[ontology.lagrangian]
-gravity = true
+[[ontology.coupling]]
+kind    = "gravity"
+species = ["dark matter", "baryonic matter"]
 
 # ── Simulation ───────────────────────────────────────
 
@@ -75,8 +75,8 @@ interval = 10
 [output.display]
 blob_size = 28.0
 
-[output.display.species.alpha]
-colormap = "cool"  # blue/purple for dark matter
+[output.display.species."dark matter"]
+colormap = "cool"
 
-[output.display.species.beta]
-colormap = "ember"  # red/orange/gold for baryons
+[output.display.species."baryonic matter"]
+colormap = "ember"
