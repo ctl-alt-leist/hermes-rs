@@ -158,23 +158,36 @@ impl PoissonGravity {
             HermesError::Config("gravity potential step requires field content".to_string())
         })?;
 
-        let alpha = fields.alpha.as_mut().ok_or_else(|| {
+        let alpha = fields.alpha.as_ref().ok_or_else(|| {
             HermesError::Config("gravity potential step requires α field".to_string())
         })?;
 
         let ell = fields.params.smoothing_length;
         let mass = fields.params.mass_alpha;
         let density_mean = cosmology.density_matter();
+        let grid = &fields.grid;
 
-        field_potential_step(
-            alpha,
-            &fields.grid,
-            ell,
-            mass,
-            density_mean,
-            scale_factor,
-            dt,
-        );
+        // Compute total density from all active fields.
+        let mut rho = alpha.density(mass);
+        if let Some(ref beta) = fields.beta {
+            let rho_beta = beta.density(mass);
+            rho = &rho + &rho_beta;
+        }
+
+        // Solve Poisson once for the combined density.
+        let rho_bar_field = Field::scalar_field(grid, metric::euclidean::<3>(), |_| density_mean);
+        let poisson_coupling = 4.0 * PI * GRAV * scale_factor * scale_factor;
+        let source = &(&rho - &rho_bar_field) * poisson_coupling;
+        let phi = source.laplacian_inverse();
+
+        // Apply potential to all active fields.
+        let angle = &phi * (-mass * dt / ell);
+        let fields = content.fields_mut().unwrap();
+        let alpha = fields.alpha.as_mut().unwrap();
+        *alpha = alpha.rotate_phase(&angle);
+        if let Some(ref mut beta) = fields.beta {
+            *beta = beta.rotate_phase(&angle);
+        }
 
         Ok(())
     }

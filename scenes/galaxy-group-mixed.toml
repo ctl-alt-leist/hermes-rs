@@ -69,7 +69,7 @@ interval = 1
 interval = 10
 
 [output.display]
-blob_size = 28.0
+blob_size = 128.0
 
 [output.display.species."dark matter particles"]
 colormap = "cool"

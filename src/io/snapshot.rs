@@ -149,7 +149,16 @@ impl Snapshot {
                     let density_field = alpha.density(field_state.params.mass_alpha);
                     let density: Vec<f64> = density_field.data.iter().copied().collect();
                     field_snapshots.push(FieldSpeciesSnapshot {
-                        name: "alpha".to_string(),
+                        name: "dark matter".to_string(),
+                        density,
+                    });
+                }
+
+                if let Some(ref beta) = field_state.beta {
+                    let density_field = beta.density(field_state.params.mass_alpha);
+                    let density: Vec<f64> = density_field.data.iter().copied().collect();
+                    field_snapshots.push(FieldSpeciesSnapshot {
+                        name: "baryonic matter".to_string(),
                         density,
                     });
                 }
