@@ -16,7 +16,7 @@ mod legacy;
 // Re-export new config types at the config:: level.
 pub use ontology::{
     Coupling, FieldGrade, FieldSpecies, LagrangianLegacy, Ontology, ParticleSpecies, Spacetime,
-    SpacetimeBackground,
+    SpacetimeBackground, SpeciesInitConfig,
 };
 pub use output::{DiagnosticsConfig, DisplayConfig, LoggingConfig, OutputBlock, SnapshotsConfig};
 pub use simulation::{GridConfig, HaloSpec, InitializationConfig, SimulationBlock, TimeConfig};

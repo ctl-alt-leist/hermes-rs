@@ -20,7 +20,10 @@ spectral_index = 0.965
 [ontology.particles."dark matter particles"]
 symbol = "α_p"
 n      = 32            # particles per side (32³ = 32768 total)
-mass   = 1e10          # M_sun per particle (adjusted for half-density)
+mass   = 1e10          # M_sun per particle
+
+[ontology.particles."dark matter particles".initialization]
+density_fraction = 0.5
 
 [ontology.fields."dark matter field"]
 symbol       = "α"
@@ -28,6 +31,9 @@ grade        = [0, 3]      # even subalgebra
 mass         = 1e10        # M_sun
 length_scale = 4000.0      # l/m: diffusivity (kpc² / Gyr)
 free         = "schrodinger"
+
+[ontology.fields."dark matter field".initialization]
+density_fraction = 0.5
 
 [[ontology.coupling]]
 kind    = "gravity"

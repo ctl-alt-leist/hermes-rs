@@ -94,6 +94,10 @@ pub fn init_engine(config: &EngineConfig) -> Result<(Engine, Cosmology), HermesE
 // ============================================================================
 
 /// Initialize all field and particle species from the config.
+///
+/// Each species can override the global initialization method and
+/// parameters via its own `[initialization]` sub-table. The global
+/// `[simulation.initialization]` provides defaults.
 #[allow(clippy::type_complexity)]
 fn init_species(
     config: &EngineConfig,
@@ -101,7 +105,7 @@ fn init_species(
     cosmology: &Cosmology,
     scale_factor_initial: f64,
     seed: u64,
-    method: &str,
+    global_method: &str,
 ) -> Result<
     (
         BTreeMap<String, FieldEntry>,
@@ -109,10 +113,9 @@ fn init_species(
     ),
     HermesError,
 > {
-    let n_fields = config.ontology.fields.len();
-    let n_particles = config.ontology.particles.len();
-    let n_total_species = n_fields + n_particles;
-    let density_fraction = if n_total_species > 0 {
+    let global_init = &config.simulation.initialization;
+    let n_total_species = config.ontology.fields.len() + config.ontology.particles.len();
+    let default_density_fraction = if n_total_species > 0 {
         1.0 / n_total_species as f64
     } else {
         1.0
@@ -130,6 +133,25 @@ fn init_species(
         let ell = length_scale * mass;
         let field_seed = seed + k as u64;
 
+        let species_init = spec.initialization.as_ref();
+
+        // Resolve per-species overrides with global fallbacks.
+        let method = species_init
+            .and_then(|s| s.method.as_deref())
+            .unwrap_or(global_method);
+        let density_fraction = species_init
+            .and_then(|s| s.density_fraction)
+            .unwrap_or(default_density_fraction);
+        let spectrum = species_init
+            .and_then(|s| s.spectrum.as_deref())
+            .unwrap_or(global_init.spectrum.as_str());
+        let amplitude = species_init
+            .and_then(|s| s.perturbation_amplitude)
+            .unwrap_or(global_init.perturbation_amplitude);
+        let band_pass = species_init
+            .and_then(|s| s.band_pass)
+            .unwrap_or(global_init.band_pass);
+
         let params = crate::core::content::FieldParams {
             smoothing_length: ell,
             mass_alpha: mass,
@@ -137,11 +159,7 @@ fn init_species(
 
         let data = match method {
             "zeldovich" => {
-                let spectrum = config.simulation.initialization.spectrum.as_str();
-                let amplitude = config.simulation.initialization.perturbation_amplitude;
-
                 if spectrum == "random" {
-                    let band_pass = config.simulation.initialization.band_pass;
                     zeldovich_field::random_density_field(
                         grid,
                         cosmology,
@@ -178,9 +196,57 @@ fn init_species(
                 )
             }
 
+            "uniform" => {
+                let morphis_grid = morphis::grid::Grid::<3>::new(grid.n_cells, grid.box_length);
+                let g = morphis::metric::euclidean::<3>();
+                let rho_mean = cosmology.density_matter() * density_fraction;
+                let uniform_amplitude = (rho_mean / mass).sqrt();
+                morphis::even_field::EvenField::from_fn(&morphis_grid, g, |_| {
+                    (uniform_amplitude, 0.0)
+                })
+            }
+
+            "gaussian-packet" => {
+                let center = species_init
+                    .and_then(|s| s.center)
+                    .or(global_init.center)
+                    .unwrap_or([0.5, 0.5, 0.5]);
+                let width = species_init
+                    .and_then(|s| s.width)
+                    .or(global_init.width)
+                    .unwrap_or(0.05);
+                let momentum = species_init
+                    .and_then(|s| s.momentum)
+                    .or(global_init.momentum)
+                    .unwrap_or([0.0, 0.0, 0.0]);
+
+                let morphis_grid = morphis::grid::Grid::<3>::new(grid.n_cells, grid.box_length);
+                let g = morphis::metric::euclidean::<3>();
+                let rho_mean = cosmology.density_matter() * density_fraction;
+                let nu = ell / mass;
+                let box_length = grid.box_length;
+
+                morphis::even_field::EvenField::from_fn(&morphis_grid, g, |pos| {
+                    let dx = pos[0] - center[0] * box_length;
+                    let dy = pos[1] - center[1] * box_length;
+                    let dz = pos[2] - center[2] * box_length;
+                    let r2 = dx * dx + dy * dy + dz * dz;
+                    let sigma = width * box_length;
+
+                    let rho = rho_mean * (-r2 / (2.0 * sigma * sigma)).exp()
+                        / (2.0 * std::f64::consts::PI * sigma * sigma).powf(1.5);
+                    let amplitude = (rho / mass).sqrt().max(1e-30);
+
+                    let phase =
+                        (momentum[0] * pos[0] + momentum[1] * pos[1] + momentum[2] * pos[2]) / nu;
+
+                    (amplitude * phase.cos(), amplitude * phase.sin())
+                })
+            }
+
             _ => {
                 return Err(HermesError::Config(format!(
-                    "unsupported field initialization method: {method}"
+                    "unsupported field initialization method '{method}' for species '{name}'"
                 )));
             }
         };
@@ -197,8 +263,17 @@ fn init_species(
     }
 
     // Initialize particle species.
+    let n_fields = config.ontology.fields.len();
     for (k, (name, spec)) in config.ontology.particles.iter().enumerate() {
         let particle_seed = seed + (n_fields + k) as u64;
+
+        let species_init = spec.initialization.as_ref();
+        let method = species_init
+            .and_then(|s| s.method.as_deref())
+            .unwrap_or(global_method);
+        let density_fraction = species_init
+            .and_then(|s| s.density_fraction)
+            .unwrap_or(default_density_fraction);
 
         let p = match method {
             "zeldovich" => zeldovich::zeldovich_init(
@@ -224,7 +299,7 @@ fn init_species(
 
             _ => {
                 return Err(HermesError::Config(format!(
-                    "unsupported particle initialization method: {method}"
+                    "unsupported particle initialization method '{method}' for species '{name}'"
                 )));
             }
         };

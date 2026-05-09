@@ -112,6 +112,8 @@ pub struct ParticleSpecies {
     /// Deposition kernel: "cic", "tsc", "pcs". Default: "cic".
     #[serde(default = "default_kernel")]
     pub kernel: String,
+    /// Per-species initialization overrides.
+    pub initialization: Option<SpeciesInitConfig>,
 }
 
 fn default_kernel() -> String {
@@ -143,6 +145,8 @@ pub struct FieldSpecies {
     pub length_scale: Option<f64>,
     /// Free Lagrangian dynamics: "schrodinger", "wave".
     pub free: Option<String>,
+    /// Per-species initialization overrides.
+    pub initialization: Option<SpeciesInitConfig>,
     /// Propagation speed in km/s. Only for wave fields.
     pub speed: Option<f64>,
     /// Gross-Pitaevskii self-interaction coupling constant.
@@ -173,6 +177,37 @@ impl FieldGrade {
     pub fn is_single(&self) -> bool {
         matches!(self, FieldGrade::Single(_))
     }
+}
+
+// ============================================================================
+// Per-species initialization
+// ============================================================================
+
+/// Per-species initialization overrides.
+///
+/// Each species can specify its own initialization method and
+/// parameters. Fields not set here fall back to the global
+/// `[simulation.initialization]` defaults.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SpeciesInitConfig {
+    /// Initialization method override ("zeldovich", "nfw-group",
+    /// "gaussian-packet", "uniform").
+    pub method: Option<String>,
+    /// Fraction of the cosmological mean density this species carries.
+    /// Defaults to equal split among all species if not specified.
+    pub density_fraction: Option<f64>,
+    /// Power spectrum source override ("power", "eisenstein-hu", "random").
+    pub spectrum: Option<String>,
+    /// RMS perturbation amplitude override.
+    pub perturbation_amplitude: Option<f64>,
+    /// Band-pass filter override.
+    pub band_pass: Option<[f64; 2]>,
+    /// Gaussian packet center (for "gaussian-packet" method).
+    pub center: Option<[f64; 3]>,
+    /// Gaussian packet width (for "gaussian-packet" method).
+    pub width: Option<f64>,
+    /// Gaussian packet momentum (for "gaussian-packet" method).
+    pub momentum: Option<[f64; 3]>,
 }
 
 // ============================================================================

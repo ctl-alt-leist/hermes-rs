@@ -24,6 +24,9 @@ mass         = 1e10        # M_sun
 length_scale = 2000.0      # l/m: diffusivity (kpc² / Gyr)
 free         = "schrodinger"
 
+[ontology.fields."dark matter".initialization]
+density_fraction = 0.844   # omega_cdm / omega_m
+
 [ontology.fields."baryonic matter"]
 symbol           = "β"
 grade            = [0, 3]      # even subalgebra
@@ -31,6 +34,9 @@ mass             = 1e10        # M_sun
 length_scale     = 2000.0      # l/m: diffusivity (kpc² / Gyr)
 free             = "schrodinger"
 self_interaction = 1e6         # Gross-Pitaevskii coupling (kpc³ / Gyr² / M_sun)
+
+[ontology.fields."baryonic matter".initialization]
+density_fraction = 0.156   # omega_b / omega_m
 
 [[ontology.coupling]]
 kind    = "gravity"
