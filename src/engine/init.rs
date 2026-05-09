@@ -125,13 +125,13 @@ fn init_species(
     let mut particles = BTreeMap::new();
 
     // Initialize field species.
-    for (k, (name, spec)) in config.ontology.fields.iter().enumerate() {
+    for (name, spec) in config.ontology.fields.iter() {
         let mass = spec
             .mass
             .ok_or_else(|| HermesError::Config(format!("field '{name}' requires mass")))?;
         let length_scale = spec.length_scale.unwrap_or(1.0);
         let ell = length_scale * mass;
-        let field_seed = seed + k as u64;
+        let field_seed = seed;
 
         let species_init = spec.initialization.as_ref();
 
@@ -263,9 +263,8 @@ fn init_species(
     }
 
     // Initialize particle species.
-    let n_fields = config.ontology.fields.len();
-    for (k, (name, spec)) in config.ontology.particles.iter().enumerate() {
-        let particle_seed = seed + (n_fields + k) as u64;
+    for (name, spec) in config.ontology.particles.iter() {
+        let particle_seed = seed;
 
         let species_init = spec.initialization.as_ref();
         let method = species_init

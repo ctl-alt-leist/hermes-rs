@@ -271,8 +271,6 @@ fn run_engine_live(
     let save_dir = cli.save_directory();
     let quiet = cli.quiet;
     let scene_name = cli.scene.clone();
-    let total_steps = engine_config.simulation.time.n_steps;
-    let write_interval = engine_config.output.snapshots.interval.max(1);
 
     // Copy scene TOML into output directory.
     if let Some(ref dir) = save_dir
