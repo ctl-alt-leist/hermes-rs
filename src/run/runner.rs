@@ -49,9 +49,8 @@ pub fn run(cli: &Cli) -> Result<(), HermesError> {
         return run_resume(dir, cli);
     }
 
-    // Try the config-driven path first: scenes/<name>.toml.
-    // Fall back to the legacy Scene trait if no TOML file exists.
-    let config = if let Some(scene_path) = resolve_scene_toml(&cli.scene) {
+    // Config-driven path: scenes/<name>.toml → Engine.
+    if let Some(scene_path) = resolve_scene_toml(&cli.scene) {
         let mut engine_config = crate::config::load_scene_config(&scene_path)?;
 
         // Apply CLI overrides.
@@ -61,15 +60,26 @@ pub fn run(cli: &Cli) -> Result<(), HermesError> {
         if let Some(grid) = cli.grid {
             engine_config.simulation.grid.n_cells = grid;
         }
+        engine_config.simulation.initialization.seed = cli.seed;
 
-        let cosmology = crate::physics::cosmology::Cosmology::from_engine_config(&engine_config)?;
+        if !cli.quiet {
+            let cosmology =
+                crate::physics::cosmology::Cosmology::from_engine_config(&engine_config)?;
+            let config = Configuration::from_engine_config(&engine_config, &cosmology);
+            print_header(&config, cli);
+        }
 
-        Configuration::from_engine_config(&engine_config, &cosmology)
-    } else {
-        // Legacy path: look up the Scene trait implementation.
-        let scene = scene_by_name(&cli.scene)?;
-        load_config(cli, scene.default_overrides())?
-    };
+        #[cfg(feature = "vis")]
+        if cli.live {
+            return run_engine_live(engine_config, cli);
+        }
+
+        return run_engine_headless(engine_config, cli);
+    }
+
+    // Legacy fallback: Scene trait.
+    let scene = scene_by_name(&cli.scene)?;
+    let config = load_config(cli, scene.default_overrides())?;
 
     if !cli.quiet {
         print_header(&config, cli);
@@ -115,7 +125,242 @@ fn build_simulation(
 }
 
 // ============================================================================
-// Headless: simulation on spawned thread, main blocks on join
+// Engine-based runners (TOML config → Engine → pipeline)
+// ============================================================================
+
+fn run_engine_headless(
+    engine_config: crate::config::EngineConfig,
+    cli: &Cli,
+) -> Result<(), HermesError> {
+    let save_dir = cli.save_directory();
+    let quiet = cli.quiet;
+    let scene_name = cli.scene.clone();
+    let total_steps = engine_config.simulation.time.n_steps;
+    let write_interval = engine_config.output.snapshots.interval.max(1);
+
+    // Copy scene TOML into output directory for --resume.
+    if let Some(ref dir) = save_dir
+        && let Some(scene_path) = resolve_scene_toml(&scene_name)
+    {
+        let dest = PathBuf::from(dir).join("scene.toml");
+        std::fs::create_dir_all(dir).ok();
+        std::fs::copy(&scene_path, &dest).ok();
+    }
+
+    // Channels.
+    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(512);
+    let sender = SnapshotSender::new(sim_tx);
+
+    use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
+    let multi = MultiProgress::new();
+
+    let mut consumer_senders: Vec<pipeline::ConsumerConfig> = Vec::new();
+    let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
+
+    let sim_bar = if !quiet {
+        let bar = multi.add(ProgressBar::new(total_steps as u64));
+        bar.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.cyan} [{elapsed_precise}] [{bar:40.cyan/dark.grey}] step {pos}/{len} z={msg} ({eta} remaining)",
+            )
+            .unwrap()
+            .progress_chars("=> "),
+        );
+        Some(bar)
+    } else {
+        None
+    };
+
+    if let Some(ref dir) = save_dir {
+        if !quiet {
+            println!("Saving snapshots to {dir}/");
+        }
+        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(512);
+        consumer_senders.push(pipeline::ConsumerConfig {
+            tx: disk_tx,
+            droppable: false,
+        });
+
+        let disk_progress = if !quiet {
+            let total_snapshots = total_steps / write_interval + 1;
+            let bar = multi.add(ProgressBar::new(total_snapshots as u64));
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "{spinner:.green}            [{bar:40.green/dark.grey}] {pos}/{len} snapshots saved",
+                )
+                .unwrap()
+                .progress_chars("=> "),
+            );
+            Some(bar)
+        } else {
+            None
+        };
+
+        let dir_owned = dir.clone();
+        handles.push(spawn_disk_writer(disk_rx, dir_owned, disk_progress));
+    }
+
+    let router_handle = spawn_router(router_rx, consumer_senders);
+
+    let run_start = Instant::now();
+
+    let sim_handle = thread::Builder::new()
+        .name("simulation".to_string())
+        .spawn(move || -> Result<(usize, f64), HermesError> {
+            let (mut engine, cosmology) = crate::engine::init::init_engine(&engine_config)?;
+
+            if !quiet {
+                let progress_bar = sim_bar.unwrap();
+
+                crate::engine::init::run_engine(
+                    &mut engine,
+                    &engine_config,
+                    &cosmology,
+                    &sender,
+                    |step, scale_factor| {
+                        let redshift = 1.0 / scale_factor - 1.0;
+                        progress_bar.set_position(step as u64);
+                        progress_bar.set_message(format!("{redshift:.1}"));
+                    },
+                )?;
+
+                progress_bar.finish_and_clear();
+            } else {
+                crate::engine::init::run_engine(
+                    &mut engine,
+                    &engine_config,
+                    &cosmology,
+                    &sender,
+                    |_, _| {},
+                )?;
+            }
+
+            Ok((engine.state.step, engine.state.time))
+        })
+        .expect("failed to spawn simulation thread");
+
+    let (n_steps_done, final_scale_factor) =
+        sim_handle.join().expect("simulation thread panicked")?;
+
+    let run_time = run_start.elapsed();
+
+    let _ = router_handle.join();
+    for h in handles {
+        let _ = h.join();
+    }
+
+    if !quiet {
+        println!(
+            "Completed {} steps in {:.2}s ({:.1} ms/step)",
+            n_steps_done,
+            run_time.as_secs_f64(),
+            run_time.as_secs_f64() * 1000.0 / n_steps_done.max(1) as f64,
+        );
+        println!("Final state: z = {:.1}", 1.0 / final_scale_factor - 1.0);
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "vis")]
+fn run_engine_live(
+    engine_config: crate::config::EngineConfig,
+    cli: &Cli,
+) -> Result<(), HermesError> {
+    let save_dir = cli.save_directory();
+    let quiet = cli.quiet;
+    let scene_name = cli.scene.clone();
+    let total_steps = engine_config.simulation.time.n_steps;
+    let write_interval = engine_config.output.snapshots.interval.max(1);
+
+    // Copy scene TOML into output directory.
+    if let Some(ref dir) = save_dir
+        && let Some(scene_path) = resolve_scene_toml(&scene_name)
+    {
+        let dest = PathBuf::from(dir).join("scene.toml");
+        std::fs::create_dir_all(dir).ok();
+        std::fs::copy(&scene_path, &dest).ok();
+    }
+
+    let cosmology_for_vis =
+        crate::physics::cosmology::Cosmology::from_engine_config(&engine_config)?;
+    let vis_config =
+        Configuration::from_engine_config(&engine_config, &cosmology_for_vis).visualization;
+    let box_length = engine_config.simulation.grid.box_length;
+
+    let (sim_tx, router_rx) = mpsc::sync_channel::<PipelineMessage>(512);
+    let sender = SnapshotSender::new(sim_tx);
+
+    let mut consumer_senders: Vec<pipeline::ConsumerConfig> = Vec::new();
+    let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
+
+    // Disk writer (if saving).
+    if let Some(ref dir) = save_dir {
+        if !quiet {
+            println!("Saving snapshots to {dir}/");
+        }
+        let (disk_tx, disk_rx) = mpsc::sync_channel::<PipelineMessage>(512);
+        consumer_senders.push(pipeline::ConsumerConfig {
+            tx: disk_tx,
+            droppable: false,
+        });
+        let dir_owned = dir.clone();
+        handles.push(spawn_disk_writer(disk_rx, dir_owned, None));
+    }
+
+    // Precompute thread → viewer.
+    let (precompute_tx, precompute_rx) = mpsc::sync_channel::<PipelineMessage>(512);
+    consumer_senders.push(pipeline::ConsumerConfig {
+        tx: precompute_tx,
+        droppable: true,
+    });
+
+    let (frame_tx, frame_rx) = mpsc::sync_channel::<pipeline::ViewerMessage>(4);
+    handles.push(pipeline::spawn_precompute(
+        precompute_rx,
+        frame_tx,
+        box_length,
+        vis_config.clone(),
+    ));
+
+    let router_handle = spawn_router(router_rx, consumer_senders);
+
+    // Simulation on spawned thread.
+    let sim_handle = thread::Builder::new()
+        .name("simulation".to_string())
+        .spawn(move || -> Result<(), HermesError> {
+            let (mut engine, cosmology) = crate::engine::init::init_engine(&engine_config)?;
+
+            crate::engine::init::run_engine(
+                &mut engine,
+                &engine_config,
+                &cosmology,
+                &sender,
+                |_, _| {},
+            )
+        })
+        .expect("failed to spawn simulation thread");
+
+    // Main thread: viewer event loop.
+    if !quiet {
+        println!("Starting live viewer + simulation...");
+        println!("(close the viewer window to exit)");
+        println!();
+    }
+    pipeline::run_viewer_main_thread(frame_rx, vis_config);
+
+    let _ = sim_handle.join().expect("simulation thread panicked");
+    let _ = router_handle.join();
+    for h in handles {
+        let _ = h.join();
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Legacy headless: simulation on spawned thread, main blocks on join
 // ============================================================================
 
 fn run_headless(config: Configuration, cli: &Cli) -> Result<(), HermesError> {

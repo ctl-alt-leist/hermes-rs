@@ -14,6 +14,7 @@
 /// half-steps merge.
 pub mod coupling;
 pub mod free;
+pub mod init;
 pub mod sector;
 pub mod solver;
 pub mod state;
