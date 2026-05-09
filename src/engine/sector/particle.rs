@@ -102,14 +102,17 @@ impl Sector for ParticleSector {
         // CIC deposit onto hermes grid, then convert to morphis Field.
         let hermes_density = crate::physics::cic::assign_density(particles, &state.grid);
 
-        // Convert hermes ScalarField (0-based) → morphis Field<3> (1-based).
+        // Convert hermes ScalarField → morphis Field<3>.
+        // The callback receives physical positions; convert to grid indices.
+        let cell_length = state.grid.cell_length;
+        let n = state.grid.n_cells;
         let morphis_density = morphis::field::Field::scalar_field(
             &state.morphis_grid,
             morphis::metric::euclidean::<3>(),
-            |indices| {
-                let m0 = (indices[0] - 1.0) as usize;
-                let m1 = (indices[1] - 1.0) as usize;
-                let m2 = (indices[2] - 1.0) as usize;
+            |pos| {
+                let m0 = ((pos[0] / cell_length) as usize).min(n - 1);
+                let m1 = ((pos[1] / cell_length) as usize).min(n - 1);
+                let m2 = ((pos[2] / cell_length) as usize).min(n - 1);
                 hermes_density.data[[m0, m1, m2]]
             },
         );
