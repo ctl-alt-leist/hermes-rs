@@ -43,6 +43,11 @@ pub fn default_halo_configs() -> Vec<HaloConfig> {
 }
 
 /// Generate initial conditions for multiple colliding halos.
+/// Generate initial conditions for multiple colliding halos.
+///
+/// `density_fraction` controls what fraction of the cosmological mean
+/// density this population carries. Use 1.0 for a single-species run,
+/// 0.5 for a mixed run where particles and fields each carry half.
 pub fn colliding_halos_init(
     n_per_side: usize,
     grid: &Grid,
@@ -50,6 +55,7 @@ pub fn colliding_halos_init(
     _scale_factor_initial: f64,
     seed: u64,
     halo_configs: &[HaloConfig],
+    density_fraction: f64,
 ) -> Result<Particles, HermesError> {
     let n_halos = halo_configs.len();
 
@@ -57,7 +63,7 @@ pub fn colliding_halos_init(
     let box_length = grid.box_length;
     let box_center = box_length / 2.0;
 
-    let density_mean = cosmology.density_matter();
+    let density_mean = cosmology.density_matter() * density_fraction;
     let mass_total = density_mean * grid.box_volume();
     let mass_particle = mass_total / n_total as f64;
 

@@ -526,6 +526,7 @@ fn galaxy_group_field_initializes_with_nonzero_velocity() {
         1.0,
         42,
         &halos,
+        1.0,
     );
 
     // Extract Madelung velocity.

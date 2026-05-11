@@ -14,6 +14,7 @@
 /// half-steps merge.
 pub mod coupling;
 pub mod free;
+pub mod init;
 pub mod sector;
 pub mod solver;
 pub mod state;
@@ -22,6 +23,7 @@ use morphis::field::Field;
 
 use crate::error::HermesError;
 use crate::physics::cosmology::Cosmology;
+use crate::physics::particles::Particles;
 
 use sector::Sector;
 use solver::GravitySolver;
@@ -98,7 +100,20 @@ impl Engine {
             let density_mean = cosmology.density_matter();
 
             let total_density = aggregate_density(sectors, state)?;
-            let potential = solver.solve(&total_density, density_mean, scale_factor)?;
+
+            // Collect particle species references for the solver.
+            let particle_species: Vec<(&str, &Particles)> = state
+                .particles
+                .iter()
+                .map(|(name, p)| (name.as_str(), p))
+                .collect();
+
+            let potential = solver.solve(
+                &total_density,
+                density_mean,
+                scale_factor,
+                &particle_species,
+            )?;
 
             for sector in sectors.iter_mut() {
                 sector.potential_flow(state, &potential, scale_factor, dt)?;

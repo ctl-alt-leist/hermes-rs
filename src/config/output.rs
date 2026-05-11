@@ -144,6 +144,10 @@ pub struct SpeciesDisplayConfig {
     /// Colormap range as [floor, ceiling] in density / rho_mean.
     /// If absent, falls back to the global colormap_range.
     pub colormap_range: Option<[f64; 2]>,
+    /// Per-species blob size override.
+    pub blob_size: Option<f32>,
+    /// Per-species blob opacity override.
+    pub blob_alpha: Option<f32>,
 }
 
 fn default_colormap() -> String {

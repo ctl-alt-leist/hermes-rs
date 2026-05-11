@@ -1,9 +1,8 @@
 # Multi-species cosmological simulation (aspirational).
 #
-# Dark matter particles, a dark matter wavefunction alpha,
-# a baryon field beta, and an electromagnetic bivector field gamma.
-# Gravity couples everything massive; electromagnetism couples
-# the baryons to the EM field.
+# Dark matter particles, a dark matter field, a baryon field, and
+# an electromagnetic bivector field. Gravity couples everything
+# massive; electromagnetism couples baryons to the EM field.
 
 # ── Ontology ─────────────────────────────────────────
 
@@ -16,29 +15,37 @@ omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
 
-[ontology.particles.dark_matter]
-count = 262144  # 64^3
-mass  = 1e10    # M_sun
+[ontology.particles."dark matter particles"]
+symbol = "α_p"
+n      = 64        # particles per side (64³ total)
+mass   = 1e10      # M_sun
 
-[ontology.fields.alpha]
-grade        = [0, 3]    # even subalgebra
-mass         = 1e10      # M_sun
-length_scale = 2000.0    # kpc^2 / Gyr
+[ontology.fields."dark matter"]
+symbol       = "α"
+grade        = [0, 3]      # even subalgebra
+mass         = 1e10        # M_sun
+length_scale = 2000.0      # kpc² / Gyr
 free         = "schrodinger"
 
-[ontology.fields.beta]
-grade        = [0, 3]    # even subalgebra (baryon fluid)
-mass         = 1e6       # M_sun
-length_scale = 500.0     # kpc^2 / Gyr
+[ontology.fields."baryonic matter"]
+symbol       = "β"
+grade        = [0, 3]      # even subalgebra (baryon fluid)
+mass         = 1e6         # M_sun
+length_scale = 500.0       # kpc² / Gyr
 free         = "euler"
 
-[ontology.fields.gamma]
-grade = 2  # bivector
-free  = "maxwell"
+[ontology.fields."magnetic field"]
+symbol = "γ"
+grade  = 2         # bivector
+free   = "maxwell"
 
-[ontology.lagrangian]
-gravity         = true                 # universal: all massive species
-electromagnetic = ["beta", "gamma"]    # selective: charged species only
+[[ontology.coupling]]
+kind    = "gravity"
+species = ["dark matter particles", "dark matter", "baryonic matter"]
+
+[[ontology.coupling]]
+kind    = "electromagnetic"
+species = ["baryonic matter", "magnetic field"]
 
 # ── Simulation ───────────────────────────────────────
 
@@ -64,11 +71,11 @@ interval = 1
 [output.diagnostics]
 interval = 10
 
-[output.display.species.alpha]
-colormap = "cool"  # blue/purple for dark matter
+[output.display.species."dark matter"]
+colormap = "cool"
 
-[output.display.species.beta]
-colormap = "ember"  # red/orange/gold for baryons
+[output.display.species."baryonic matter"]
+colormap = "ember"
 
-[output.display.species.gamma]
-colormap = "verdant"  # green for magnetic field
+[output.display.species."magnetic field"]
+colormap = "verdant"

@@ -24,6 +24,10 @@ use crate::physics::grid::Grid as HermesGrid;
 use crate::physics::spectral::{fft_3d, ifft_3d};
 
 /// Generate Zel'dovich initial conditions as a wavefunction.
+/// Generate a Zeldovich-displaced Schrodinger field from the CDM power spectrum.
+///
+/// `density_fraction` controls what fraction of the cosmological mean
+/// density this field carries.
 pub fn zeldovich_wavefunction(
     grid: &HermesGrid,
     cosmology: &Cosmology,
@@ -31,6 +35,7 @@ pub fn zeldovich_wavefunction(
     scale_factor_initial: f64,
     perturbation_amplitude: f64,
     seed: u64,
+    density_fraction: f64,
 ) -> Result<EvenField<3>, HermesError> {
     let n = grid.n_cells;
     let n_complex = n / 2 + 1;
@@ -40,7 +45,7 @@ pub fn zeldovich_wavefunction(
     let ell = params.smoothing_length;
     let mass = params.mass_alpha;
 
-    let density_mean = cosmology.density_matter();
+    let density_mean = cosmology.density_matter() * density_fraction;
     let growth = cosmology.growth_factor(scale_factor_initial);
     let growth_rate = cosmology.growth_rate(scale_factor_initial);
     let hubble_a = cosmology.hubble_parameter(scale_factor_initial);
@@ -205,6 +210,12 @@ pub fn zeldovich_wavefunction(
 ///
 /// Velocity is derived from the density gradient (Zel'dovich-like
 /// relation v ~ -grad(delta) / k^2), scaled to be dynamically active.
+/// Generate a random-spectrum Schrodinger field.
+///
+/// `density_fraction` controls what fraction of the cosmological mean
+/// density this field carries. Use 1.0 for a single-species run,
+/// or a fraction for multi-field runs.
+#[allow(clippy::too_many_arguments)]
 pub fn random_density_field(
     grid: &HermesGrid,
     cosmology: &Cosmology,
@@ -213,6 +224,7 @@ pub fn random_density_field(
     perturbation_amplitude: f64,
     band_pass: [f64; 2],
     seed: u64,
+    density_fraction: f64,
 ) -> EvenField<3> {
     let n = grid.n_cells;
     let n_complex = n / 2 + 1;
@@ -220,7 +232,7 @@ pub fn random_density_field(
     let cell_length = grid.cell_length;
     let ell = params.smoothing_length;
     let mass = params.mass_alpha;
-    let density_mean = cosmology.density_matter();
+    let density_mean = cosmology.density_matter() * density_fraction;
 
     let mut rng = ChaCha20Rng::seed_from_u64(seed);
 

@@ -20,12 +20,13 @@ fn flrw_particle_config_parses() {
         omega_m = 0.315
         omega_v = 0.685
 
-        [ontology.particles.dark_matter]
-        count = 8000
+        [ontology.particles."dark matter"]
+        n = 20
         mass = 1e10
 
-        [ontology.lagrangian]
-        gravity = true
+        [[ontology.coupling]]
+        kind = "gravity"
+        species = ["dark matter"]
 
         [simulation.grid]
         n_cells = 32
@@ -46,8 +47,9 @@ fn flrw_particle_config_parses() {
     assert!(!config.ontology.has_fields());
     assert!(config.ontology.has_gravity());
 
-    let dm = &config.ontology.particles["dark_matter"];
-    assert_eq!(dm.count, 8000);
+    let dm = &config.ontology.particles["dark matter"];
+    assert_eq!(dm.n, 20);
+    assert_eq!(dm.total_count(), 8000);
     assert_eq!(dm.mass, 1e10);
 }
 
@@ -136,31 +138,35 @@ fn multi_species_config_parses() {
         omega_m = 0.315
         omega_v = 0.685
 
-        [ontology.particles.dark_matter]
-        count = 1000
+        [ontology.particles."dark matter"]
+        n = 10
         mass = 1e10
 
-        [ontology.fields.alpha]
+        [ontology.fields."dark matter field"]
         grade = [0, 3]
         mass = 1e10
         length_scale = 2000.0
         free = "schrodinger"
 
-        [ontology.fields.beta]
+        [ontology.fields."baryonic matter"]
         grade = [0, 3]
         mass = 1e10
         length_scale = 2000.0
         free = "schrodinger"
         self_interaction = 1e6
 
-        [ontology.fields.gamma]
+        [ontology.fields."magnetic field"]
         grade = 2
         free = "maxwell"
         speed = 3e5
 
-        [ontology.lagrangian]
-        gravity = true
-        electromagnetic = ["beta", "gamma"]
+        [[ontology.coupling]]
+        kind = "gravity"
+        species = ["dark matter", "dark matter field", "baryonic matter"]
+
+        [[ontology.coupling]]
+        kind = "electromagnetic"
+        species = ["baryonic matter", "magnetic field"]
 
         [simulation.grid]
         n_cells = 32
@@ -176,18 +182,18 @@ fn multi_species_config_parses() {
     assert!(config.ontology.has_particles());
     assert!(config.ontology.has_fields());
     assert!(config.ontology.has_gravity());
-    assert_eq!(config.ontology.lagrangian.electromagnetic.len(), 2);
+    assert_eq!(config.ontology.coupling.len(), 2);
 
-    assert!(config.ontology.fields.contains_key("alpha"));
-    assert!(config.ontology.fields.contains_key("beta"));
-    assert!(config.ontology.fields.contains_key("gamma"));
+    assert!(config.ontology.fields.contains_key("dark matter field"));
+    assert!(config.ontology.fields.contains_key("baryonic matter"));
+    assert!(config.ontology.fields.contains_key("magnetic field"));
 
-    let gamma = &config.ontology.fields["gamma"];
-    assert_eq!(gamma.grade, FieldGrade::Single(2));
-    assert_eq!(gamma.free.as_deref(), Some("maxwell"));
+    let magnetic = &config.ontology.fields["magnetic field"];
+    assert_eq!(magnetic.grade, FieldGrade::Single(2));
+    assert_eq!(magnetic.free.as_deref(), Some("maxwell"));
 
-    let beta = &config.ontology.fields["beta"];
-    assert_eq!(beta.self_interaction, Some(1e6));
+    let baryons = &config.ontology.fields["baryonic matter"];
+    assert_eq!(baryons.self_interaction, Some(1e6));
 }
 
 #[test]
@@ -281,11 +287,12 @@ fn flrw_requires_cosmological_parameters() {
         background = "flrw"
 
         [ontology.particles.test]
-        count = 8
+        n = 2
         mass = 1.0
 
-        [ontology.lagrangian]
-        gravity = true
+        [[ontology.coupling]]
+        kind = "gravity"
+        species = ["test"]
 
         [simulation.grid]
         n_cells = 8

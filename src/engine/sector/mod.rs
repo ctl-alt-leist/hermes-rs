@@ -14,6 +14,7 @@
 ///   T-flow = position drift
 ///   V-flow = momentum kick from interpolated force
 pub mod gross_pitaevskii;
+pub mod particle;
 pub mod schrodinger;
 
 use morphis::field::Field;
@@ -28,10 +29,13 @@ use crate::error::HermesError;
 /// Gravitational potential produced by the gravity solver.
 ///
 /// Field sectors use `phi` for phase rotation. Particle sectors
-/// (when added) will use an interpolated force derived from `phi`.
+/// use `force` for CIC-interpolated momentum kicks.
 pub struct Potential {
     /// Gravitational potential on the grid (morphis Field<3>).
     pub phi: Field<3>,
+    /// Gravitational force field F = -grad(phi) (hermes VectorField).
+    /// Present when the simulation has particle species.
+    pub force: Option<crate::physics::field::VectorField>,
 }
 
 // ============================================================================

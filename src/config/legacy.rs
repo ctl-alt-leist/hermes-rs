@@ -182,7 +182,7 @@ impl Configuration {
             .particles
             .values()
             .next()
-            .map(|p| (p.count as f64).cbrt().round() as usize)
+            .map(|p| p.n)
             .unwrap_or(1);
 
         // Determine field params from the first field species, if any.

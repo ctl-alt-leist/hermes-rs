@@ -3,7 +3,7 @@
 //! Usage:
 //!   cargo run --example measure_growth --release -- data/cosmic-web-field-growing
 
-use hermes_rs::io::snapshot::{SnapshotContent, load_snapshot};
+use hermes_rs::io::snapshot::load_snapshot;
 use hermes_rs::run::pipeline::find_snapshot_paths;
 
 fn main() {
@@ -39,11 +39,8 @@ fn main() {
             }
         };
 
-        if let SnapshotContent::Fields { ref species, .. } = snapshot.content {
-            let density = &species
-                .first()
-                .expect("no field species in snapshot")
-                .density;
+        if let Some(field) = snapshot.fields.first() {
+            let density = &field.density;
             let rho_mean = density.iter().sum::<f64>() / density.len() as f64;
 
             let deltas: Vec<f64> = density.iter().map(|&rho| rho / rho_mean - 1.0).collect();
