@@ -2,7 +2,7 @@
 ///
 /// Parsed from the `[ontology]` section of the TOML config. Defines the
 /// background spacetime, the species in the box (particles and fields),
-/// and the Lagrangian terms that govern their dynamics and interactions.
+/// and the coupling terms that govern their interactions.
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
@@ -13,7 +13,7 @@ use crate::error::HermesError;
 // Top-level ontology
 // ============================================================================
 
-/// The full ontology of a simulation: spacetime, species, and Lagrangian.
+/// The full ontology of a simulation: spacetime, species, and couplings.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Ontology {
     pub spacetime: Spacetime,
@@ -21,8 +21,12 @@ pub struct Ontology {
     pub particles: BTreeMap<String, ParticleSpecies>,
     #[serde(default)]
     pub fields: BTreeMap<String, FieldSpecies>,
+    /// Coupling terms between species.
     #[serde(default)]
-    pub lagrangian: Lagrangian,
+    pub coupling: Vec<Coupling>,
+    /// Legacy lagrangian block (supported for backward compatibility).
+    #[serde(default)]
+    pub lagrangian: Option<LagrangianLegacy>,
 }
 
 // ============================================================================
@@ -97,13 +101,30 @@ impl Spacetime {
 /// A particle species declaration.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ParticleSpecies {
-    /// Total particle count.
-    pub count: usize,
+    /// Display symbol for diagnostics and visualization labels.
+    pub symbol: Option<String>,
+    /// Particles per side (total count = n^3).
+    pub n: usize,
     /// Mass per particle in M_sun.
     pub mass: f64,
-    /// Electric charge (for electromagnetic coupling). Defaults to 0.
-    #[serde(default)]
-    pub charge: f64,
+    /// Gravitational softening length in kpc.
+    pub softening: Option<f64>,
+    /// Deposition kernel: "cic", "tsc", "pcs". Default: "cic".
+    #[serde(default = "default_kernel")]
+    pub kernel: String,
+    /// Per-species initialization overrides.
+    pub initialization: Option<SpeciesInitConfig>,
+}
+
+fn default_kernel() -> String {
+    "cic".to_string()
+}
+
+impl ParticleSpecies {
+    /// Total particle count (n^3).
+    pub fn total_count(&self) -> usize {
+        self.n * self.n * self.n
+    }
 }
 
 // ============================================================================
@@ -113,6 +134,8 @@ pub struct ParticleSpecies {
 /// A field species declaration.
 #[derive(Debug, Clone, Deserialize)]
 pub struct FieldSpecies {
+    /// Display symbol for diagnostics and visualization labels.
+    pub symbol: Option<String>,
     /// Algebraic grade(s). Single integer for a pure grade (e.g. 0, 2),
     /// array for a multi-grade subspace (e.g. [0, 3] for even subalgebra).
     pub grade: FieldGrade,
@@ -120,16 +143,15 @@ pub struct FieldSpecies {
     pub mass: Option<f64>,
     /// Diffusivity l/m in kpc^2 / Gyr. Only for Schrodinger fields.
     pub length_scale: Option<f64>,
-    /// Free Lagrangian dynamics: "schrodinger", "euler", "maxwell", "wave".
+    /// Free Lagrangian dynamics: "schrodinger", "wave".
     pub free: Option<String>,
+    /// Per-species initialization overrides.
+    pub initialization: Option<SpeciesInitConfig>,
     /// Propagation speed in km/s. Only for wave fields.
     pub speed: Option<f64>,
     /// Gross-Pitaevskii self-interaction coupling constant.
     /// Units: kpc^3 / Gyr^2 / M_sun. Only for Schrodinger fields.
     pub self_interaction: Option<f64>,
-    /// Electric charge (for electromagnetic coupling). Defaults to 0.
-    #[serde(default)]
-    pub charge: f64,
 }
 
 /// Algebraic grade specification: single grade or multi-grade subspace.
@@ -158,19 +180,55 @@ impl FieldGrade {
 }
 
 // ============================================================================
-// Lagrangian
+// Per-species initialization
 // ============================================================================
 
-/// Coupling terms between species.
+/// Per-species initialization overrides.
 ///
-/// Free terms live on each species entry (the `free` key);
-/// cross-species interactions live here.
+/// Each species can specify its own initialization method and
+/// parameters. Fields not set here fall back to the global
+/// `[simulation.initialization]` defaults.
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct Lagrangian {
-    /// Gravitational coupling. `true` means universal (all massive species).
+pub struct SpeciesInitConfig {
+    /// Initialization method override ("zeldovich", "nfw-group",
+    /// "gaussian-packet", "uniform").
+    pub method: Option<String>,
+    /// Fraction of the cosmological mean density this species carries.
+    /// Defaults to equal split among all species if not specified.
+    pub density_fraction: Option<f64>,
+    /// Power spectrum source override ("power", "eisenstein-hu", "random").
+    pub spectrum: Option<String>,
+    /// RMS perturbation amplitude override.
+    pub perturbation_amplitude: Option<f64>,
+    /// Band-pass filter override.
+    pub band_pass: Option<[f64; 2]>,
+    /// Gaussian packet center (for "gaussian-packet" method).
+    pub center: Option<[f64; 3]>,
+    /// Gaussian packet width (for "gaussian-packet" method).
+    pub width: Option<f64>,
+    /// Gaussian packet momentum (for "gaussian-packet" method).
+    pub momentum: Option<[f64; 3]>,
+}
+
+// ============================================================================
+// Couplings
+// ============================================================================
+
+/// A coupling term between species.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Coupling {
+    /// Coupling kind: "gravity", "electromagnetic", etc.
+    pub kind: String,
+    /// Participating species (by name).
+    #[serde(default)]
+    pub species: Vec<String>,
+}
+
+/// Legacy lagrangian block (backward compatibility).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct LagrangianLegacy {
     #[serde(default)]
     pub gravity: bool,
-    /// Electromagnetic coupling. Lists the species names that participate.
     #[serde(default)]
     pub electromagnetic: Vec<String>,
 }
@@ -184,7 +242,7 @@ impl Ontology {
     pub fn validate(&self) -> Result<(), HermesError> {
         self.spacetime.validate()?;
 
-        // Validate field species
+        // Validate field species.
         for (name, field) in &self.fields {
             if field.free.as_deref() == Some("schrodinger") && field.length_scale.is_none() {
                 return Err(HermesError::Config(format!(
@@ -198,7 +256,7 @@ impl Ontology {
             }
         }
 
-        // Validate electromagnetic coupling references
+        // Validate coupling references.
         let all_species: Vec<&str> = self
             .particles
             .keys()
@@ -206,15 +264,18 @@ impl Ontology {
             .map(|s| s.as_str())
             .collect();
 
-        for species_name in &self.lagrangian.electromagnetic {
-            if !all_species.contains(&species_name.as_str()) {
-                return Err(HermesError::Config(format!(
-                    "electromagnetic coupling references unknown species '{species_name}'"
-                )));
+        for coupling in &self.coupling {
+            for species_name in &coupling.species {
+                if !all_species.contains(&species_name.as_str()) {
+                    return Err(HermesError::Config(format!(
+                        "{} coupling references unknown species '{species_name}'",
+                        coupling.kind
+                    )));
+                }
             }
         }
 
-        // Must have at least one species
+        // Must have at least one species.
         if self.particles.is_empty() && self.fields.is_empty() {
             return Err(HermesError::Config(
                 "ontology must declare at least one species".to_string(),
@@ -234,8 +295,9 @@ impl Ontology {
         !self.fields.is_empty()
     }
 
-    /// Whether gravity is enabled.
+    /// Whether gravity is enabled (via coupling list or legacy lagrangian).
     pub fn has_gravity(&self) -> bool {
-        self.lagrangian.gravity
+        self.coupling.iter().any(|c| c.kind == "gravity")
+            || self.lagrangian.as_ref().is_some_and(|l| l.gravity)
     }
 }

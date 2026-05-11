@@ -1,27 +1,43 @@
-# Galaxy group (particle-mesh).
+# Galaxy group (mixed particle + field).
 #
 # Three colliding NFW dark matter halos in an 8 Mpc box.
-# Dark matter represented as N-body particles with CIC deposition.
+# Half the cosmological mass is in N-body particles, half in a
+# Schrodinger field. Both are initialized from the same NFW
+# density profile with the same halo geometry and infall velocities.
+# The two representations coexist under shared Poisson gravity.
 
 # ── Ontology ─────────────────────────────────────────
 
 [ontology.spacetime]
 background     = "flrw"
-hubble         = 67.4    # km/s/Mpc
+hubble         = 67.4      # km/s/Mpc
 omega_m        = 0.315
 omega_v        = 0.6849085
 omega_b        = 0.0493
 sigma_8        = 0.811
 spectral_index = 0.965
 
-[ontology.particles."dark matter"]
-symbol = "α"
-n      = 32        # particles per side (32³ = 32768 total)
-mass   = 1e10      # M_sun per particle
+[ontology.particles."dark matter particles"]
+symbol = "α_p"
+n      = 32            # particles per side (32³ = 32768 total)
+mass   = 1e10          # M_sun per particle
+
+[ontology.particles."dark matter particles".initialization]
+density_fraction = 0.5
+
+[ontology.fields."dark matter field"]
+symbol       = "α"
+grade        = [0, 3]      # even subalgebra
+mass         = 1e10        # M_sun
+length_scale = 4000.0      # l/m: diffusivity (kpc² / Gyr)
+free         = "schrodinger"
+
+[ontology.fields."dark matter field".initialization]
+density_fraction = 0.5
 
 [[ontology.coupling]]
 kind    = "gravity"
-species = ["dark matter"]
+species = ["dark matter particles", "dark matter field"]
 
 # ── Simulation ───────────────────────────────────────
 
@@ -32,7 +48,7 @@ box_length = 8000.0  # kpc (8 Mpc)
 [simulation.time]
 scale_factor_range = [0.5, 3.0]
 stepping           = "linear"
-n_steps            = 1000
+n_steps            = 500
 
 [simulation.initialization]
 method = "nfw-group"
@@ -58,5 +74,11 @@ interval = 1
 [output.diagnostics]
 interval = 10
 
-[output.display.species."dark matter"]
+[output.display]
+blob_size = 128.0
+
+[output.display.species."dark matter particles"]
 colormap = "cool"
+
+[output.display.species."dark matter field"]
+colormap = "ember"

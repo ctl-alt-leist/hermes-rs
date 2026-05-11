@@ -32,6 +32,11 @@ use crate::physics::grid::Grid as HermesGrid;
 /// The density is a superposition of NFW profiles placed at the same
 /// positions as the particle scene. The velocity is encoded as a
 /// linear phase ramp per halo: exp(I * m * v_k · (x - x_k) / l).
+/// Generate colliding NFW halos as a wavefunction field.
+///
+/// `density_fraction` controls what fraction of the cosmological mean
+/// density this field carries. Use 1.0 for a single-species run,
+/// 0.5 for a mixed run where particles and fields each carry half.
 pub fn colliding_halos_field(
     grid: &HermesGrid,
     cosmology: &Cosmology,
@@ -39,6 +44,7 @@ pub fn colliding_halos_field(
     _scale_factor_initial: f64,
     seed: u64,
     halo_configs: &[super::nfw::HaloConfig],
+    density_fraction: f64,
 ) -> EvenField<3> {
     let n_halos = halo_configs.len();
 
@@ -47,7 +53,7 @@ pub fn colliding_halos_field(
     let box_center = box_length / 2.0;
     let cell_length = grid.cell_length;
 
-    let density_mean = cosmology.density_matter();
+    let density_mean = cosmology.density_matter() * density_fraction;
     let mass_total = density_mean * grid.box_volume();
     let g_const = crate::physics::constants::G;
 

@@ -1,23 +1,23 @@
 # Free wave packet in a static box.
 #
-# No gravity, no expansion. A Schrodinger field alpha
-# evolves freely: the wave packet disperses under the
-# kinetic term alone. Useful as a test bench for verifying
-# dispersion relations, norm conservation, and group velocity.
+# No gravity, no expansion. A Schrodinger field evolves freely:
+# the wave packet disperses under the kinetic term alone. Useful
+# as a test bench for dispersion relations, norm conservation,
+# and group velocity.
 
 # ── Ontology ─────────────────────────────────────────
 
 [ontology.spacetime]
 background = "static"
 
-[ontology.fields.alpha]
-grade        = [0, 3]  # even subalgebra
+[ontology.fields."dark matter"]
+symbol       = "α"
+grade        = [0, 3]    # even subalgebra
 mass         = 1.0
 length_scale = 1.0
 free         = "schrodinger"
 
-[ontology.lagrangian]
-# empty: free evolution, no couplings
+# No couplings: free evolution only.
 
 # ── Simulation ───────────────────────────────────────
 
@@ -42,8 +42,8 @@ momentum = [4.0, 0.0, 0.0]
 [output.snapshots]
 interval = 10
 
-[output.display.species.alpha]
-colormap = "cool"
-
 [output.diagnostics]
 interval = 50
+
+[output.display.species."dark matter"]
+colormap = "cool"

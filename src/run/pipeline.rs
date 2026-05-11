@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender};
 use std::thread;
 
-use crate::colormap::{colormap_by_name, colormap_hot};
+use crate::colormap::colormap_by_name;
 use crate::config::VisualizationConfig;
 use crate::io::snapshot::{Snapshot, save_snapshot};
 
@@ -238,120 +238,105 @@ pub fn spawn_precompute(
 
 /// Convert a snapshot to a display-ready frame.
 ///
-/// Dispatches on content type: particles use velocity colormap,
-/// fields sample density at grid points with brightness colormap.
+/// Renders all particle and field species into a single DisplayFrame.
+/// Each species uses its own colormap from the visualization config.
 pub fn precompute_frame_rayon(
     snapshot: &Snapshot,
     box_length: f64,
     vis: &VisualizationConfig,
 ) -> DisplayFrame {
-    use crate::io::snapshot::SnapshotContent;
-
     let scale = 1.0 / box_length as f32;
 
-    match &snapshot.content {
-        SnapshotContent::Particles {
-            positions, momenta, ..
-        } => {
-            let speeds: Vec<f64> = momenta.iter().map(|mom| mom.norm()).collect();
-            let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
-            let speed_min = speeds.iter().copied().fold(f64::MAX, f64::min);
-            let speed_range = (speed_max - speed_min).max(1e-30);
+    let mut out_positions = Vec::new();
+    let mut out_colors = Vec::new();
 
-            let mut out_positions = Vec::with_capacity(positions.len());
-            let mut out_colors = Vec::with_capacity(positions.len());
+    // Render mode: volumetric if any fields present, points if particles only.
+    let render_mode = if snapshot.has_fields() {
+        RenderMode::Volumetric
+    } else {
+        RenderMode::Points
+    };
 
-            for (pos, &speed) in positions.iter().zip(speeds.iter()) {
-                out_positions.push([
-                    pos.component(&[1]) as f32 * scale - 0.5,
-                    pos.component(&[2]) as f32 * scale - 0.5,
-                    pos.component(&[3]) as f32 * scale - 0.5,
-                ]);
-                let normalized = ((speed - speed_min) / speed_range).clamp(0.0, 1.0);
-                out_colors.push(colormap_hot(normalized));
-            }
+    // ── Particle species ────────────────────────────────
+    for species in &snapshot.particles {
+        let species_config = vis.species.get(&species.name);
+        let colormap_name = species_config.map(|c| c.colormap.as_str()).unwrap_or("hot");
 
-            DisplayFrame {
-                positions: out_positions,
-                colors: out_colors,
-                render_mode: RenderMode::Points,
-                step: snapshot.step,
-                scale_factor: snapshot.scale_factor,
+        let speeds: Vec<f64> = species.momenta.iter().map(|mom| mom.norm()).collect();
+        let speed_max = speeds.iter().copied().fold(1e-30_f64, f64::max);
+        let speed_min = speeds.iter().copied().fold(f64::MAX, f64::min);
+        let speed_range = (speed_max - speed_min).max(1e-30);
+
+        for (pos, &speed) in species.positions.iter().zip(speeds.iter()) {
+            out_positions.push([
+                pos.component(&[1]) as f32 * scale - 0.5,
+                pos.component(&[2]) as f32 * scale - 0.5,
+                pos.component(&[3]) as f32 * scale - 0.5,
+            ]);
+            let normalized = ((speed - speed_min) / speed_range).clamp(0.0, 1.0);
+            out_colors.push(colormap_by_name(colormap_name, normalized));
+        }
+    }
+
+    // ── Field species ───────────────────────────────────
+    let n = snapshot.n_cells;
+    if n > 0 && !snapshot.fields.is_empty() {
+        use rand::Rng;
+        use rand::SeedableRng;
+        use rand_chacha::ChaCha20Rng;
+
+        let cell_size = 1.0 / n as f64;
+        let jitter_amount = vis.jitter * cell_size;
+        let total = n * n * n;
+
+        // Precompute grid positions with jitter (shared across all species).
+        let mut rng = ChaCha20Rng::seed_from_u64(0);
+        let mut positions_grid: Vec<[f32; 3]> = Vec::with_capacity(total);
+        for flat_idx in 0..total {
+            let m0 = flat_idx / (n * n);
+            let m1 = (flat_idx / n) % n;
+            let m2 = flat_idx % n;
+
+            let dx: f64 = rng.random_range(-jitter_amount..jitter_amount);
+            let dy: f64 = rng.random_range(-jitter_amount..jitter_amount);
+            let dz: f64 = rng.random_range(-jitter_amount..jitter_amount);
+
+            let x = ((m0 as f64 + 0.5) * cell_size + dx - 0.5) as f32;
+            let y = ((m1 as f64 + 0.5) * cell_size + dy - 0.5) as f32;
+            let z = ((m2 as f64 + 0.5) * cell_size + dz - 0.5) as f32;
+
+            positions_grid.push([x, y, z]);
+        }
+
+        for field_snapshot in &snapshot.fields {
+            let species_config = vis.species.get(&field_snapshot.name);
+            let colormap_name = species_config.map(|c| c.colormap.as_str()).unwrap_or("hot");
+            let colormap_range = species_config
+                .and_then(|c| c.colormap_range)
+                .unwrap_or(vis.colormap_range);
+
+            let density = &field_snapshot.density;
+            let density_mean = density.iter().sum::<f64>() / density.len().max(1) as f64;
+            let log_min = (colormap_range[0] * density_mean).max(1e-30).ln();
+            let log_max = (colormap_range[1] * density_mean).ln();
+            let log_range = (log_max - log_min).max(1e-10);
+
+            for (flat_idx, &rho) in density.iter().enumerate() {
+                out_positions.push(positions_grid[flat_idx]);
+
+                let log_rho = rho.max(1e-30).ln();
+                let normalized = ((log_rho - log_min) / log_range).clamp(0.0, 1.0);
+                out_colors.push(colormap_by_name(colormap_name, normalized));
             }
         }
-        SnapshotContent::Fields { species, n_cells } => {
-            let n = *n_cells;
-            if n == 0 || species.is_empty() {
-                return DisplayFrame {
-                    positions: Vec::new(),
-                    colors: Vec::new(),
-                    render_mode: RenderMode::Volumetric,
-                    step: snapshot.step,
-                    scale_factor: snapshot.scale_factor,
-                };
-            }
+    }
 
-            use rand::Rng;
-            use rand::SeedableRng;
-            use rand_chacha::ChaCha20Rng;
-
-            let cell_size = 1.0 / n as f64;
-            let jitter_amount = vis.jitter * cell_size;
-            let total = n * n * n;
-
-            let mut out_positions = Vec::with_capacity(total);
-            let mut out_colors = Vec::with_capacity(total);
-
-            // Precompute grid positions with jitter (shared across all species).
-            let mut rng = ChaCha20Rng::seed_from_u64(0);
-            let mut positions_grid: Vec<[f32; 3]> = Vec::with_capacity(total);
-            for flat_idx in 0..total {
-                let m0 = flat_idx / (n * n);
-                let m1 = (flat_idx / n) % n;
-                let m2 = flat_idx % n;
-
-                let dx: f64 = rng.random_range(-jitter_amount..jitter_amount);
-                let dy: f64 = rng.random_range(-jitter_amount..jitter_amount);
-                let dz: f64 = rng.random_range(-jitter_amount..jitter_amount);
-
-                let x = ((m0 as f64 + 0.5) * cell_size + dx - 0.5) as f32;
-                let y = ((m1 as f64 + 0.5) * cell_size + dy - 0.5) as f32;
-                let z = ((m2 as f64 + 0.5) * cell_size + dz - 0.5) as f32;
-
-                positions_grid.push([x, y, z]);
-            }
-
-            // Render each field species with its own colormap.
-            for field_snapshot in species {
-                let species_config = vis.species.get(&field_snapshot.name);
-                let colormap_name = species_config.map(|c| c.colormap.as_str()).unwrap_or("hot");
-                let colormap_range = species_config
-                    .and_then(|c| c.colormap_range)
-                    .unwrap_or(vis.colormap_range);
-
-                let density = &field_snapshot.density;
-                let density_mean = density.iter().sum::<f64>() / density.len().max(1) as f64;
-                let log_min = (colormap_range[0] * density_mean).max(1e-30).ln();
-                let log_max = (colormap_range[1] * density_mean).ln();
-                let log_range = (log_max - log_min).max(1e-10);
-
-                for (flat_idx, &rho) in density.iter().enumerate() {
-                    out_positions.push(positions_grid[flat_idx]);
-
-                    let log_rho = rho.max(1e-30).ln();
-                    let normalized = ((log_rho - log_min) / log_range).clamp(0.0, 1.0);
-                    out_colors.push(colormap_by_name(colormap_name, normalized));
-                }
-            }
-
-            DisplayFrame {
-                positions: out_positions,
-                colors: out_colors,
-                render_mode: RenderMode::Volumetric,
-                step: snapshot.step,
-                scale_factor: snapshot.scale_factor,
-            }
-        }
+    DisplayFrame {
+        positions: out_positions,
+        colors: out_colors,
+        render_mode,
+        step: snapshot.step,
+        scale_factor: snapshot.scale_factor,
     }
 }
 
@@ -751,22 +736,17 @@ pub fn count_snapshots(dir: &str) -> usize {
 /// For particles: maximum coordinate extent.
 /// For fields: uses n_cells as a proxy (assumes unit box, scale = 1).
 fn estimate_box_length(snapshot: &crate::io::snapshot::Snapshot) -> f64 {
-    use crate::io::snapshot::SnapshotContent;
-
-    match &snapshot.content {
-        SnapshotContent::Particles { positions, .. } => {
-            positions
-                .iter()
-                .flat_map(|pos: &morphis::vector::Vector<3>| {
-                    (1..=3).map(move |d| pos.component(&[d]).abs())
-                })
-                .fold(0.0_f64, f64::max)
-                * 1.1
-        }
-        SnapshotContent::Fields { n_cells, .. } => {
-            // Field snapshots don't carry the box length explicitly.
-            // Use 1.0 as the normalized box — the precompute maps to [-0.5, 0.5].
-            *n_cells as f64
-        }
+    if snapshot.has_fields() {
+        snapshot.n_cells as f64
+    } else {
+        snapshot
+            .particles
+            .iter()
+            .flat_map(|s| s.positions.iter())
+            .flat_map(|pos: &morphis::vector::Vector<3>| {
+                (1..=3).map(move |d| pos.component(&[d]).abs())
+            })
+            .fold(0.0_f64, f64::max)
+            * 1.1
     }
 }

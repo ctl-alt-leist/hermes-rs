@@ -21,6 +21,7 @@ pub use zeldovich::{power_spectrum, transfer_function, zeldovich_init};
 use crate::config::EngineConfig;
 use crate::core::content::{Content, FieldParams, FieldState};
 use crate::core::dynamics::Dynamics;
+use crate::core::mixed_dynamics::MixedDynamics;
 use crate::core::pm_dynamics::ParticleMeshDynamics;
 use crate::core::schrodinger_dynamics::SchrodingerPoissonDynamics;
 use crate::engine::coupling::poisson::PoissonGravity;
@@ -61,7 +62,7 @@ pub fn initialize_from_config(
                 .particles
                 .values()
                 .next()
-                .map(|p| (p.count as f64).cbrt().round() as usize)
+                .map(|p| p.n)
                 .unwrap_or(32);
 
             let particles = zeldovich::zeldovich_init(
@@ -77,7 +78,7 @@ pub fn initialize_from_config(
         }
 
         ("zeldovich", false, true) => {
-            // Field Zel'dovich wavefunction.
+            // Field Zel'dovich wavefunction(s).
             let (ell, mass) = field_params_from_config(config)?;
             let morphis_grid = morphis::grid::Grid::<3>::new(n_cells, box_length);
 
@@ -89,32 +90,49 @@ pub fn initialize_from_config(
             let spectrum = config.simulation.initialization.spectrum.as_str();
             let perturbation_amplitude = config.simulation.initialization.perturbation_amplitude;
 
-            let alpha = if spectrum == "random" {
-                let band_pass = config.simulation.initialization.band_pass;
-                zeldovich_field::random_density_field(
-                    &grid,
-                    cosmology,
-                    &params,
-                    scale_factor_initial,
-                    perturbation_amplitude,
-                    band_pass,
-                    seed,
-                )
+            let n_fields = config.ontology.fields.len();
+            let density_fraction = 1.0 / n_fields as f64;
+
+            let init_field = |frac: f64, field_seed: u64| -> Result<_, HermesError> {
+                if spectrum == "random" {
+                    let band_pass = config.simulation.initialization.band_pass;
+                    Ok(zeldovich_field::random_density_field(
+                        &grid,
+                        cosmology,
+                        &params,
+                        scale_factor_initial,
+                        perturbation_amplitude,
+                        band_pass,
+                        field_seed,
+                        frac,
+                    ))
+                } else {
+                    zeldovich_field::zeldovich_wavefunction(
+                        &grid,
+                        cosmology,
+                        &params,
+                        scale_factor_initial,
+                        perturbation_amplitude,
+                        field_seed,
+                        frac,
+                    )
+                }
+            };
+
+            // Initialize alpha (first field species).
+            let alpha = init_field(density_fraction, seed)?;
+
+            // Initialize beta (second field species, if present) with a different seed.
+            let beta = if n_fields >= 2 {
+                Some(init_field(density_fraction, seed + 1)?)
             } else {
-                zeldovich_field::zeldovich_wavefunction(
-                    &grid,
-                    cosmology,
-                    &params,
-                    scale_factor_initial,
-                    perturbation_amplitude,
-                    seed,
-                )?
+                None
             };
 
             let field_state = FieldState {
                 grid: morphis_grid,
                 alpha: Some(alpha),
-                beta: None,
+                beta,
                 gamma: None,
                 params,
             };
@@ -132,7 +150,7 @@ pub fn initialize_from_config(
                 .particles
                 .values()
                 .next()
-                .map(|p| (p.count as f64).cbrt().round() as usize)
+                .map(|p| p.n)
                 .unwrap_or(32);
 
             let halos = halo_configs_from_config(config);
@@ -143,6 +161,7 @@ pub fn initialize_from_config(
                 scale_factor_initial,
                 seed,
                 &halos,
+                1.0,
             )?;
             let dynamics = ParticleMeshDynamics::new(grid);
 
@@ -167,6 +186,7 @@ pub fn initialize_from_config(
                 scale_factor_initial,
                 seed,
                 &halos,
+                1.0,
             );
 
             let field_state = FieldState {
@@ -181,6 +201,66 @@ pub fn initialize_from_config(
             let dynamics = SchrodingerPoissonDynamics::new(gravity);
 
             Ok((Content::Fields(field_state), Box::new(dynamics)))
+        }
+
+        ("nfw-group", true, true) => {
+            // Mixed: particles and fields each carry half the cosmological density.
+            let n_per_side = config
+                .ontology
+                .particles
+                .values()
+                .next()
+                .map(|p| p.n)
+                .unwrap_or(32);
+
+            let (ell, mass) = field_params_from_config(config)?;
+            let morphis_grid = morphis::grid::Grid::<3>::new(n_cells, box_length);
+
+            let params = FieldParams {
+                smoothing_length: ell,
+                mass_alpha: mass,
+            };
+
+            let halos = halo_configs_from_config(config);
+
+            let particles = nfw::colliding_halos_init(
+                n_per_side,
+                &grid,
+                cosmology,
+                scale_factor_initial,
+                seed,
+                &halos,
+                0.5,
+            )?;
+
+            let alpha = nfw_field::colliding_halos_field(
+                &grid,
+                cosmology,
+                &params,
+                scale_factor_initial,
+                seed,
+                &halos,
+                0.5,
+            );
+
+            let field_state = FieldState {
+                grid: morphis_grid,
+                alpha: Some(alpha),
+                beta: None,
+                gamma: None,
+                params,
+            };
+
+            let gravity = PoissonGravity::new(grid);
+            let dynamics = MixedDynamics::new(gravity);
+
+            Ok((
+                Content::Mixed {
+                    particles,
+                    fields: field_state,
+                },
+                Box::new(dynamics),
+            ))
         }
 
         _ => Err(HermesError::Config(format!(

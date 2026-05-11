@@ -1,15 +1,16 @@
 //! Simulation snapshots for storage and visualization.
 //!
-//! A `Snapshot` captures the simulation state at one moment. The content
-//! can be particles (positions + momenta), fields (density grid), or both.
-//! Snapshots are the data contract between the simulation, the file system,
-//! and the viewer.
+//! A `Snapshot` captures the simulation state at one moment. It holds
+//! named species of both particles and fields — any combination,
+//! including empty. Snapshots are the data contract between the
+//! simulation, the file system, and the viewer.
 
 use morphis::vector::Vector;
 use serde::{Deserialize, Serialize};
 
 use crate::algebra::{components_from_vector, vector_from_array};
 use crate::core::content::Content;
+use crate::engine::state::SimulationState;
 use crate::physics::diagnostics::Diagnostics;
 use crate::physics::grid::Grid;
 use crate::physics::particles::Particles;
@@ -25,59 +26,139 @@ pub struct Snapshot {
     pub step: usize,
     /// Scale factor a.
     pub scale_factor: f64,
-    /// Content-specific data.
-    pub content: SnapshotContent,
+    /// Named particle species.
+    pub particles: Vec<ParticleSpeciesSnapshot>,
+    /// Named field species.
+    pub fields: Vec<FieldSpeciesSnapshot>,
+    /// Grid cells per side (for field rendering). Zero if no fields.
+    pub n_cells: usize,
     /// Conservation diagnostics.
     pub diagnostics: DiagnosticsSummary,
 }
 
-/// Content-specific snapshot data.
+/// Snapshot of a single particle species.
 #[derive(Debug, Clone)]
-pub enum SnapshotContent {
-    /// Particle positions and momenta as morphis grade-1 vectors.
-    Particles {
-        positions: Vec<Vector<3>>,
-        momenta: Vec<Vector<3>>,
-        mass_particle: f64,
-    },
-    /// Field densities on a grid, one per species.
-    Fields {
-        /// Per-species density data.
-        species: Vec<FieldSpeciesSnapshot>,
-        /// Grid cells per side.
-        n_cells: usize,
-    },
+pub struct ParticleSpeciesSnapshot {
+    /// Species name.
+    pub name: String,
+    /// Particle positions as morphis grade-1 vectors.
+    pub positions: Vec<Vector<3>>,
+    /// Particle momenta as morphis grade-1 vectors.
+    pub momenta: Vec<Vector<3>>,
+    /// Mass per particle in M_sun.
+    pub mass_particle: f64,
 }
 
-/// Density snapshot for a single field species.
+/// Density snapshot of a single field species.
 #[derive(Debug, Clone)]
 pub struct FieldSpeciesSnapshot {
-    /// Species name (matches the key in SimulationState.fields).
+    /// Species name.
     pub name: String,
     /// Density values at each grid point (flattened, length n_cells^3).
     pub density: Vec<f64>,
 }
 
 impl Snapshot {
-    /// Capture a lightweight snapshot from Content.
-    ///
-    /// For particles: copies positions and momenta.
-    /// For fields: extracts density.
-    /// Skips expensive diagnostics (Poisson solve).
+    /// Whether this snapshot contains any particle species.
+    pub fn has_particles(&self) -> bool {
+        !self.particles.is_empty()
+    }
+
+    /// Whether this snapshot contains any field species.
+    pub fn has_fields(&self) -> bool {
+        !self.fields.is_empty()
+    }
+
+    /// Total particle count across all species.
+    pub fn particle_count(&self) -> usize {
+        self.particles.iter().map(|s| s.positions.len()).sum()
+    }
+
+    // ========================================================================
+    // Capture from the new engine's SimulationState
+    // ========================================================================
+
+    /// Capture all named species from the engine's SimulationState.
+    pub fn capture_from_state(state: &SimulationState, step: usize, scale_factor: f64) -> Self {
+        let mut particle_snapshots = Vec::new();
+        for (name, particles) in &state.particles {
+            let positions = (0..particles.count())
+                .map(|p| particles.position_of(p))
+                .collect();
+            let momenta = (0..particles.count())
+                .map(|p| particles.momentum_of(p))
+                .collect();
+
+            particle_snapshots.push(ParticleSpeciesSnapshot {
+                name: name.clone(),
+                positions,
+                momenta,
+                mass_particle: particles.mass_particle,
+            });
+        }
+
+        let mut field_snapshots = Vec::new();
+        for (name, field) in &state.fields {
+            let density_field = field.data.density(field.mass);
+            let density: Vec<f64> = density_field.data.iter().copied().collect();
+            field_snapshots.push(FieldSpeciesSnapshot {
+                name: name.clone(),
+                density,
+            });
+        }
+
+        let n_cells = state
+            .fields
+            .values()
+            .next()
+            .map(|f| f.data.grid.n_cells)
+            .unwrap_or(0);
+
+        Self {
+            step,
+            scale_factor,
+            particles: particle_snapshots,
+            fields: field_snapshots,
+            n_cells,
+            diagnostics: DiagnosticsSummary {
+                scale_factor,
+                mass_total: 0.0,
+                momentum_magnitude: 0.0,
+                energy_kinetic: 0.0,
+                energy_potential: 0.0,
+                angular_momentum_magnitude: 0.0,
+            },
+        }
+    }
+
+    // ========================================================================
+    // Capture from legacy Content (backward compatibility)
+    // ========================================================================
+
+    /// Capture a lightweight snapshot from legacy Content.
     pub fn capture_from_content(content: &Content, step: usize, scale_factor: f64) -> Self {
         match content {
             Content::Particles(particles) => {
-                Self::capture_lightweight(particles, step, scale_factor)
+                Self::capture_particles("dark_matter", particles, step, scale_factor)
             }
             Content::Fields(field_state) => {
                 let n = field_state.grid.n_cells;
-                let mut species_snapshots = Vec::new();
+                let mut field_snapshots = Vec::new();
 
                 if let Some(ref alpha) = field_state.alpha {
                     let density_field = alpha.density(field_state.params.mass_alpha);
                     let density: Vec<f64> = density_field.data.iter().copied().collect();
-                    species_snapshots.push(FieldSpeciesSnapshot {
-                        name: "alpha".to_string(),
+                    field_snapshots.push(FieldSpeciesSnapshot {
+                        name: "dark matter".to_string(),
+                        density,
+                    });
+                }
+
+                if let Some(ref beta) = field_state.beta {
+                    let density_field = beta.density(field_state.params.mass_alpha);
+                    let density: Vec<f64> = density_field.data.iter().copied().collect();
+                    field_snapshots.push(FieldSpeciesSnapshot {
+                        name: "baryonic matter".to_string(),
                         density,
                     });
                 }
@@ -85,33 +166,67 @@ impl Snapshot {
                 Self {
                     step,
                     scale_factor,
-                    content: SnapshotContent::Fields {
-                        species: species_snapshots,
-                        n_cells: n,
-                    },
+                    particles: Vec::new(),
+                    fields: field_snapshots,
+                    n_cells: n,
+                    diagnostics: DiagnosticsSummary::zero(scale_factor),
+                }
+            }
+            Content::Mixed { particles, fields } => {
+                let positions = (0..particles.count())
+                    .map(|p| particles.position_of(p))
+                    .collect();
+                let momenta = (0..particles.count())
+                    .map(|p| particles.momentum_of(p))
+                    .collect();
+
+                let particle_snapshots = vec![ParticleSpeciesSnapshot {
+                    name: "dark matter particles".to_string(),
+                    positions,
+                    momenta,
+                    mass_particle: particles.mass_particle,
+                }];
+
+                let n = fields.grid.n_cells;
+                let mut field_snapshots = Vec::new();
+                if let Some(ref alpha) = fields.alpha {
+                    let density_field = alpha.density(fields.params.mass_alpha);
+                    let density: Vec<f64> = density_field.data.iter().copied().collect();
+                    field_snapshots.push(FieldSpeciesSnapshot {
+                        name: "dark matter field".to_string(),
+                        density,
+                    });
+                }
+
+                Self {
+                    step,
+                    scale_factor,
+                    particles: particle_snapshots,
+                    fields: field_snapshots,
+                    n_cells: n,
                     diagnostics: DiagnosticsSummary {
                         scale_factor,
-                        mass_total: 0.0,
-                        momentum_magnitude: 0.0,
-                        energy_kinetic: 0.0,
+                        mass_total: particles.total_mass(),
+                        momentum_magnitude: particles.total_momentum().norm(),
+                        energy_kinetic: particles.kinetic_energy(scale_factor),
                         energy_potential: 0.0,
                         angular_momentum_magnitude: 0.0,
                     },
                 }
             }
-            Content::Mixed { particles, .. } => {
-                // For now, snapshot the particle part only.
-                Self::capture_lightweight(particles, step, scale_factor)
-            }
         }
     }
 
-    /// Capture a lightweight particle snapshot.
-    pub fn capture_lightweight(particles: &Particles, step: usize, scale_factor: f64) -> Self {
+    /// Capture a single particle species snapshot.
+    fn capture_particles(
+        name: &str,
+        particles: &Particles,
+        step: usize,
+        scale_factor: f64,
+    ) -> Self {
         let positions = (0..particles.count())
             .map(|p| particles.position_of(p))
             .collect();
-
         let momenta = (0..particles.count())
             .map(|p| particles.momentum_of(p))
             .collect();
@@ -121,11 +236,14 @@ impl Snapshot {
         Self {
             step,
             scale_factor,
-            content: SnapshotContent::Particles {
+            particles: vec![ParticleSpeciesSnapshot {
+                name: name.to_string(),
                 positions,
                 momenta,
                 mass_particle: particles.mass_particle,
-            },
+            }],
+            fields: Vec::new(),
+            n_cells: 0,
             diagnostics: DiagnosticsSummary {
                 scale_factor,
                 mass_total: particles.total_mass(),
@@ -151,7 +269,6 @@ impl Snapshot {
         let positions = (0..particles.count())
             .map(|p| particles.position_of(p))
             .collect();
-
         let momenta = (0..particles.count())
             .map(|p| particles.momentum_of(p))
             .collect();
@@ -159,122 +276,110 @@ impl Snapshot {
         Self {
             step,
             scale_factor,
-            content: SnapshotContent::Particles {
+            particles: vec![ParticleSpeciesSnapshot {
+                name: "dark_matter".to_string(),
                 positions,
                 momenta,
                 mass_particle: particles.mass_particle,
-            },
+            }],
+            fields: Vec::new(),
+            n_cells: 0,
             diagnostics: DiagnosticsSummary::from_diagnostics(&diag),
         }
     }
 
-    /// Number of particles (if particle content).
-    pub fn particle_count(&self) -> usize {
-        match &self.content {
-            SnapshotContent::Particles { positions, .. } => positions.len(),
-            SnapshotContent::Fields { .. } => 0,
-        }
-    }
-
-    /// Access particle positions (if particle content).
+    /// Access the first particle species' positions (legacy convenience).
     pub fn positions(&self) -> Option<&[Vector<3>]> {
-        match &self.content {
-            SnapshotContent::Particles { positions, .. } => Some(positions),
-            _ => None,
-        }
+        self.particles.first().map(|s| s.positions.as_slice())
     }
 
-    /// Access particle momenta (if particle content).
+    /// Access the first particle species' momenta (legacy convenience).
     pub fn momenta(&self) -> Option<&[Vector<3>]> {
-        match &self.content {
-            SnapshotContent::Particles { momenta, .. } => Some(momenta),
-            _ => None,
-        }
+        self.particles.first().map(|s| s.momenta.as_slice())
     }
 
-    /// Reconstruct a Particles object from a particle snapshot.
-    ///
-    /// Returns None if the snapshot contains field content.
+    /// Reconstruct a Particles object from the first particle species.
     pub fn to_particles(&self) -> Option<Particles> {
-        match &self.content {
-            SnapshotContent::Particles {
-                positions,
-                momenta,
-                mass_particle,
-            } => {
-                let n = positions.len();
-                let mut particles = Particles::zeros(n, *mass_particle);
-                for (p, (pos, mom)) in positions.iter().zip(momenta.iter()).enumerate() {
-                    particles.set_position(p, pos);
-                    particles.set_momentum(p, mom);
-                }
-
-                Some(particles)
-            }
-            _ => None,
+        let species = self.particles.first()?;
+        let n = species.positions.len();
+        let mut particles = Particles::zeros(n, species.mass_particle);
+        for (p, (pos, mom)) in species
+            .positions
+            .iter()
+            .zip(species.momenta.iter())
+            .enumerate()
+        {
+            particles.set_position(p, pos);
+            particles.set_momentum(p, mom);
         }
+
+        Some(particles)
     }
+
+    // ========================================================================
+    // Serialization
+    // ========================================================================
 
     /// Convert to serializable disk format.
     pub fn to_disk(&self) -> SnapshotOnDisk {
-        let content = match &self.content {
-            SnapshotContent::Particles {
-                positions,
-                momenta,
-                mass_particle,
-            } => SnapshotContentOnDisk::Particles {
-                positions: positions.iter().map(components_from_vector).collect(),
-                momenta: momenta.iter().map(components_from_vector).collect(),
-                mass_particle: *mass_particle,
-            },
-            SnapshotContent::Fields { species, n_cells } => SnapshotContentOnDisk::Fields {
-                species: species
-                    .iter()
-                    .map(|s| FieldSpeciesOnDisk {
-                        name: s.name.clone(),
-                        density: s.density.clone(),
-                    })
-                    .collect(),
-                n_cells: *n_cells,
-            },
-        };
+        let particle_species = self
+            .particles
+            .iter()
+            .map(|s| ParticleSpeciesOnDisk {
+                name: s.name.clone(),
+                positions: s.positions.iter().map(components_from_vector).collect(),
+                momenta: s.momenta.iter().map(components_from_vector).collect(),
+                mass_particle: s.mass_particle,
+            })
+            .collect();
+
+        let field_species = self
+            .fields
+            .iter()
+            .map(|s| FieldSpeciesOnDisk {
+                name: s.name.clone(),
+                density: s.density.clone(),
+            })
+            .collect();
 
         SnapshotOnDisk {
             step: self.step,
             scale_factor: self.scale_factor,
-            content,
+            particles: particle_species,
+            fields: field_species,
+            n_cells: self.n_cells,
             diagnostics: self.diagnostics.clone(),
         }
     }
 
     /// Reconstruct from disk format.
     pub fn from_disk(disk: SnapshotOnDisk) -> Self {
-        let content = match disk.content {
-            SnapshotContentOnDisk::Particles {
-                positions,
-                momenta,
-                mass_particle,
-            } => SnapshotContent::Particles {
-                positions: positions.iter().map(|c| vector_from_array(*c)).collect(),
-                momenta: momenta.iter().map(|c| vector_from_array(*c)).collect(),
-                mass_particle,
-            },
-            SnapshotContentOnDisk::Fields { species, n_cells } => SnapshotContent::Fields {
-                species: species
-                    .into_iter()
-                    .map(|s| FieldSpeciesSnapshot {
-                        name: s.name,
-                        density: s.density,
-                    })
-                    .collect(),
-                n_cells,
-            },
-        };
+        let particles = disk
+            .particles
+            .into_iter()
+            .map(|s| ParticleSpeciesSnapshot {
+                name: s.name,
+                positions: s.positions.iter().map(|c| vector_from_array(*c)).collect(),
+                momenta: s.momenta.iter().map(|c| vector_from_array(*c)).collect(),
+                mass_particle: s.mass_particle,
+            })
+            .collect();
+
+        let fields = disk
+            .fields
+            .into_iter()
+            .map(|s| FieldSpeciesSnapshot {
+                name: s.name,
+                density: s.density,
+            })
+            .collect();
 
         Self {
             step: disk.step,
             scale_factor: disk.scale_factor,
-            content,
+            particles,
+            fields,
+            n_cells: disk.n_cells,
             diagnostics: disk.diagnostics,
         }
     }
@@ -296,6 +401,18 @@ pub struct DiagnosticsSummary {
 }
 
 impl DiagnosticsSummary {
+    /// Zero diagnostics at a given scale factor.
+    pub fn zero(scale_factor: f64) -> Self {
+        Self {
+            scale_factor,
+            mass_total: 0.0,
+            momentum_magnitude: 0.0,
+            energy_kinetic: 0.0,
+            energy_potential: 0.0,
+            angular_momentum_magnitude: 0.0,
+        }
+    }
+
     /// Extract from full diagnostics.
     pub fn from_diagnostics(diagnostics: &Diagnostics) -> Self {
         Self {
@@ -318,25 +435,22 @@ impl DiagnosticsSummary {
 pub struct SnapshotOnDisk {
     pub step: usize,
     pub scale_factor: f64,
-    pub content: SnapshotContentOnDisk,
+    pub particles: Vec<ParticleSpeciesOnDisk>,
+    pub fields: Vec<FieldSpeciesOnDisk>,
+    pub n_cells: usize,
     pub diagnostics: DiagnosticsSummary,
 }
 
-/// Serializable content (morphis vectors flattened to [f64; 3]).
+/// On-disk particle species.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SnapshotContentOnDisk {
-    Particles {
-        positions: Vec<[f64; 3]>,
-        momenta: Vec<[f64; 3]>,
-        mass_particle: f64,
-    },
-    Fields {
-        species: Vec<FieldSpeciesOnDisk>,
-        n_cells: usize,
-    },
+pub struct ParticleSpeciesOnDisk {
+    pub name: String,
+    pub positions: Vec<[f64; 3]>,
+    pub momenta: Vec<[f64; 3]>,
+    pub mass_particle: f64,
 }
 
-/// On-disk density for a single field species.
+/// On-disk field species density.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldSpeciesOnDisk {
     pub name: String,

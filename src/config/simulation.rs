@@ -86,6 +86,12 @@ pub struct InitializationConfig {
     /// NFW halo specifications for the nfw-group method.
     #[serde(default)]
     pub halos: Vec<HaloSpec>,
+    /// Gaussian packet center as fraction of box length (for gaussian-packet).
+    pub center: Option<[f64; 3]>,
+    /// Gaussian packet width as fraction of box length (for gaussian-packet).
+    pub width: Option<f64>,
+    /// Gaussian packet momentum (for gaussian-packet).
+    pub momentum: Option<[f64; 3]>,
 }
 
 /// NFW halo specification for the nfw-group initialization method.
@@ -122,6 +128,9 @@ impl Default for InitializationConfig {
             perturbation_amplitude: default_perturbation_amplitude(),
             band_pass: default_band_pass(),
             halos: Vec::new(),
+            center: None,
+            width: None,
+            momentum: None,
         }
     }
 }

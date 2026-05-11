@@ -58,8 +58,9 @@ impl Dynamics for SchrodingerPoissonDynamics {
         let ell = fields.params.smoothing_length;
         let mass = fields.params.mass_alpha;
         let grid = alpha.grid;
+        let has_beta = fields.beta.is_some();
 
-        // 1. Kinetic half-step in Fourier space (free evolution).
+        // 1. Kinetic half-step T(dt/2) for all fields.
         kinetic_step(
             content.fields_mut().unwrap().alpha.as_mut().unwrap(),
             &grid,
@@ -68,12 +69,22 @@ impl Dynamics for SchrodingerPoissonDynamics {
             scale_factor,
             dt / 2.0,
         );
+        if has_beta {
+            kinetic_step(
+                content.fields_mut().unwrap().beta.as_mut().unwrap(),
+                &grid,
+                ell,
+                mass,
+                scale_factor,
+                dt / 2.0,
+            );
+        }
 
-        // 2. Potential full step via shared gravity module.
+        // 2. Potential full step V(dt) via shared gravity module.
         self.gravity
             .potential_step_field(content, cosmology, scale_factor, dt)?;
 
-        // 3. Kinetic half-step in Fourier space (free evolution).
+        // 3. Kinetic half-step T(dt/2) for all fields.
         kinetic_step(
             content.fields_mut().unwrap().alpha.as_mut().unwrap(),
             &grid,
@@ -82,6 +93,16 @@ impl Dynamics for SchrodingerPoissonDynamics {
             scale_factor,
             dt / 2.0,
         );
+        if has_beta {
+            kinetic_step(
+                content.fields_mut().unwrap().beta.as_mut().unwrap(),
+                &grid,
+                ell,
+                mass,
+                scale_factor,
+                dt / 2.0,
+            );
+        }
 
         Ok(())
     }
